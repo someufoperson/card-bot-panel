@@ -31,15 +31,14 @@ async def _is_allowed(user_id: int) -> bool:
 # ── Форматирование карточки подтверждения ─────────────────────────────────────
 
 def _fmt_card(data: dict) -> str:
-    card_num = data.get("card_number")
-    masked = f"**** **** **** {card_num[-4:]}" if card_num and len(card_num) >= 4 else "—"
+    from datetime import date
+
+    card_num = data.get("card_number") or "—"
 
     purchase = data.get("purchase_date")
     if purchase:
         try:
-            from datetime import date
-            d = date.fromisoformat(purchase)
-            purchase = d.strftime("%d.%m.%Y")
+            purchase = date.fromisoformat(purchase).strftime("%d.%m.%Y")
         except ValueError:
             pass
 
@@ -47,7 +46,7 @@ def _fmt_card(data: dict) -> str:
         "📋 Проверь данные карты:\n\n"
         f"👤 ФИО: {data.get('full_name') or '—'}\n"
         f"🏦 Банк: {data.get('bank') or '—'}\n"
-        f"💳 Карта: {masked}\n"
+        f"💳 Карта: {card_num}\n"
         f"📱 Телефон: {data.get('phone_number') or '—'}\n"
         f"📅 Дата покупки: {purchase or '—'}\n"
         f"🗂 Группа: {data.get('group_name') or 'не указана'}"
@@ -95,6 +94,10 @@ async def handle_text(message: Message):
             "Пришли данные в другом формате (ФИО, номер карты, банк, телефон)."
         )
         return
+
+    if not card_data.get("purchase_date"):
+        from datetime import date
+        card_data["purchase_date"] = date.today().isoformat()
 
     _pending[message.from_user.id] = card_data
 
