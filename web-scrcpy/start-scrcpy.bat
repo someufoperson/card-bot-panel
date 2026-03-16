@@ -1,7 +1,6 @@
 @echo off
-chcp 65001 >nul
 echo ============================================
-echo  web-scrcpy — multi-device panel
+echo  web-scrcpy - multi-device panel
 echo ============================================
 
 echo Checking ADB...
@@ -24,8 +23,27 @@ if errorlevel 1 (
 scrcpy --version
 
 echo.
+echo Looking for Python...
+py --version >nul 2>&1
+if not errorlevel 1 (
+    set PY=py
+    goto :python_found
+)
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set PY=python
+    goto :python_found
+)
+echo [ERROR] Python 3 not found.
+echo Install: winget install Python.Python.3.11
+pause & exit /b 1
+
+:python_found
+%PY% --version
+
+echo.
 echo Installing Python dependencies...
-pip install -r "%~dp0requirements.txt" --quiet
+%PY% -m pip install -r "%~dp0requirements.txt" --quiet
 
 echo.
 echo Starting ADB server...
@@ -36,5 +54,5 @@ echo Starting web-scrcpy on port 5000...
 echo Press Ctrl+C to stop.
 echo.
 cd /d "%~dp0"
-python app.py
+%PY% app.py
 pause
