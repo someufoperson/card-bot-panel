@@ -63,7 +63,7 @@ class CardResponse(BaseModel):
     id: uuid.UUID
     full_name: str
     bank: str | None
-    card_number_masked: str
+    card_number: str
     card_last4: str
     phone_number: str | None
     purchase_date: date | None

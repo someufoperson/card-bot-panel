@@ -8,12 +8,12 @@ from app.repositories.card_repository import CardRepository
 from app.schemas.card import CardCreate, CardListResponse, CardResponse, CardUpdate
 
 
-def _mask_card(card: Card) -> CardResponse:
+def _to_response(card: Card) -> CardResponse:
     return CardResponse(
         id=card.id,
         full_name=card.full_name,
         bank=card.bank,
-        card_number_masked=f"**** **** **** {card.card_last4}",
+        card_number=card.card_number,
         card_last4=card.card_last4,
         phone_number=card.phone_number,
         purchase_date=card.purchase_date,
@@ -37,7 +37,7 @@ class CardService:
     ) -> CardListResponse:
         cards, total = await self._repo.get_all(search, bank, group, page, limit)
         return CardListResponse(
-            items=[_mask_card(c) for c in cards],
+            items=[_to_response(c) for c in cards],
             total=total,
             page=page,
             limit=limit,
@@ -47,7 +47,7 @@ class CardService:
         card = await self._repo.get_by_id(card_id)
         if card is None:
             raise HTTPException(status_code=404, detail="Карта не найдена")
-        return _mask_card(card)
+        return _to_response(card)
 
     async def create(self, data: CardCreate) -> CardResponse:
         card = Card(
@@ -61,7 +61,7 @@ class CardService:
         )
         card = await self._repo.insert(card)
         await self._session.commit()
-        return _mask_card(card)
+        return _to_response(card)
 
     async def update(self, card_id: uuid.UUID, data: CardUpdate) -> CardResponse:
         card = await self._repo.get_by_id(card_id)
@@ -74,7 +74,7 @@ class CardService:
 
         card = await self._repo.update(card, updates)
         await self._session.commit()
-        return _mask_card(card)
+        return _to_response(card)
 
     async def delete(self, card_id: uuid.UUID) -> None:
         card = await self._repo.get_by_id(card_id)

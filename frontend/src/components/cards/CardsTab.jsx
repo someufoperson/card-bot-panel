@@ -98,13 +98,12 @@ export default function CardsTab() {
                     <th>Телефон</th>
                     <th>Дата покупки</th>
                     <th>Группа</th>
-                    <th>Добавлена</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cards.length === 0 ? (
                     <tr>
-                      <td colSpan={7}>
+                      <td colSpan={6}>
                         <div className="empty-state">
                           <div>Нет карт</div>
                           <p>Добавьте карту через кнопку выше или Telegram-бота</p>
@@ -116,11 +115,10 @@ export default function CardsTab() {
                       <tr key={card.id} onClick={() => setSelectedCard(card)}>
                         <td>{card.full_name}</td>
                         <td>{card.bank || '—'}</td>
-                        <td className="td-mono">{card.card_number_masked}</td>
+                        <td className="td-mono">{card.card_number}</td>
                         <td>{card.phone_number || '—'}</td>
                         <td>{fmtDate(card.purchase_date)}</td>
                         <td>{card.group_name || '—'}</td>
-                        <td style={{ color: 'var(--text-muted)' }}>{fmtDate(card.created_at)}</td>
                       </tr>
                     ))
                   )}
@@ -161,6 +159,10 @@ export default function CardsTab() {
       <CardSidebar
         card={selectedCard}
         onClose={() => setSelectedCard(null)}
+        onUpdated={(updated) => {
+          setSelectedCard(updated)
+          load(page)
+        }}
       />
     </div>
   )
