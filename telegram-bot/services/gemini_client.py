@@ -14,7 +14,6 @@ _CARD_PROMPT = """Извлеки данные банковской карты и
   "bank": "название банка или null",
   "card_number": "только цифры без пробелов или null",
   "phone_number": "+7XXXXXXXXXX или null",
-  "purchase_date": "YYYY-MM-DD или null",
   "group_name": null
 }
 Если данных недостаточно — верни поля как null, не придумывай."""

@@ -95,9 +95,8 @@ async def handle_text(message: Message):
         )
         return
 
-    if not card_data.get("purchase_date"):
-        from datetime import date
-        card_data["purchase_date"] = date.today().isoformat()
+    from datetime import date
+    card_data["purchase_date"] = date.today().isoformat()
 
     _pending[message.from_user.id] = card_data
 
