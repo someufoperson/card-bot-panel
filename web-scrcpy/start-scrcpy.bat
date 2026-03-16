@@ -35,7 +35,7 @@ if not errorlevel 1 (
     goto :python_found
 )
 echo [ERROR] Python 3 not found.
-echo Install: winget install Python.Python.3.11
+echo Install: winget install Python.Python.3.13
 pause & exit /b 1
 
 :python_found

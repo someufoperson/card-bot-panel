@@ -43,7 +43,7 @@ foreach ($cmd in @("py", "python", "python3")) {
 }
 if (-not $py) {
     Write-Host "ERROR: Python 3 not found." -ForegroundColor Red
-    Write-Host "Install from https://python.org or via: winget install Python.Python.3.11" -ForegroundColor Yellow
+    Write-Host "Install from https://python.org or via: winget install Python.Python.3.13" -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
     exit 1
 }
