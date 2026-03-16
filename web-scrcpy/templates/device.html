@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ model or device_id }} — web-scrcpy</title>
+  <style>
+    :root {
+      --bg: #1E1F22; --surface: #2B2D30; --text: #BCBEC4;
+      --muted: #7A7E85; --border: #393B40; --accent: #4D9CF8; --danger: #CC4433;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+      display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+    }
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 16px; height: 44px; flex-shrink: 0;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .back { color: var(--muted); text-decoration: none; font-size: 13px; }
+    .back:hover { color: var(--text); }
+    .device-name { font-weight: 600; font-size: 14px; }
+    .device-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+    #status-badge {
+      margin-left: auto; padding: 3px 10px; border-radius: 10px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-connecting { color: var(--muted); background: rgba(122,126,133,.15); }
+    .badge-connected  { color: #57965C; background: rgba(87,150,92,.15); }
+    .badge-disconnected { color: var(--danger); background: rgba(204,68,51,.15); }
+
+    .viewport {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      overflow: hidden; position: relative;
+    }
+    #screen {
+      max-width: 100%; max-height: 100%;
+      image-rendering: pixelated;
+      cursor: none;
+      touch-action: none;
+    }
+    #overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px;
+      background: rgba(0,0,0,.6);
+      font-size: 14px; color: var(--text);
+    }
+    #overlay.hidden { display: none; }
+    #overlay .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #session-msg {
+      display: none;
+      position: fixed; inset: 0; z-index: 99;
+      background: rgba(0,0,0,.75);
+      align-items: center; justify-content: center;
+    }
+    #session-msg.show { display: flex; }
+    .session-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 32px 36px; text-align: center; max-width: 360px;
+    }
+    .session-box h2 { font-size: 16px; margin-bottom: 8px; }
+    .session-box p { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .btn {
+      padding: 8px 20px; border: none; border-radius: 5px;
+      font-family: inherit; font-size: 13px; font-weight: 500;
+      cursor: pointer; background: var(--accent); color: #fff;
+    }
+    .btn:hover { background: #3D8CE8; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="back" href="/">← Назад</a>
+    <span class="device-name">{{ model or 'Устройство' }}</span>
+    <span class="device-id">{{ device_id }}</span>
+    <span id="status-badge" class="badge-connecting">Подключение…</span>
+  </header>
+
+  <div class="viewport">
+    <canvas id="screen"></canvas>
+    <div id="overlay">
+      <div class="spinner"></div>
+      <span id="overlay-text">Подключение к устройству…</span>
+    </div>
+  </div>
+
+  <!-- Сообщение об окончании сессии -->
+  <div id="session-msg">
+    <div class="session-box">
+      <h2>⏱ Сессия завершена</h2>
+      <p id="session-reason">Сессия завершена из-за неактивности.</p>
+      <button class="btn" onclick="location.href='/'">На главную</button>
+    </div>
+  </div>
+
+  <script>
+    const deviceId  = {{ device_id | tojson }};
+    const sessionId = {{ session_id | tojson }};
+
+    // ── Inactivity timer (из PRD) ─────────────────────────────────────────────
+    const socket = new WebSocket(`ws://${location.host}/ws/${deviceId}`);
+    let inactivityTimer;
+
+    async function loadTimeout() {
+      try {
+        const res = await fetch('http://localhost:8000/api/v1/settings/inactivity_timeout');
+        const { value } = await res.json();
+        return parseInt(value) * 60 * 1000; // минуты → мс
+      } catch {
+        return 10 * 60 * 1000; // fallback 10 минут
+      }
+    }
+
+    async function initInactivity() {
+      const timeout = await loadTimeout();
+
+      function reset() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          socket.close();
+          showMessage("Сессия завершена из-за неактивности");
+          fetch(`/api/release/${deviceId}`, { method: 'POST' });
+        }, timeout);
+      }
+
+      ['mousemove', 'keydown', 'touchstart', 'click'].forEach(e =>
+        document.addEventListener(e, reset)
+      );
+
+      socket.onopen = () => reset();
+      socket.onclose = () => {
+        fetch(`/api/release/${deviceId}`, { method: 'POST' });
+      };
+    }
+
+    initInactivity();
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    const canvas    = document.getElementById('screen');
+    const ctx       = canvas.getContext('2d');
+    const overlay   = document.getElementById('overlay');
+    const badge     = document.getElementById('status-badge');
+
+    function showMessage(reason) {
+      document.getElementById('session-reason').textContent = reason;
+      document.getElementById('session-msg').classList.add('show');
+    }
+
+    function setStatus(state) {
+      badge.className = '';
+      if (state === 'connected') {
+        badge.className = 'badge-connected';
+        badge.textContent = 'Подключено';
+        overlay.classList.add('hidden');
+      } else if (state === 'disconnected') {
+        badge.className = 'badge-disconnected';
+        badge.textContent = 'Отключено';
+      } else {
+        badge.className = 'badge-connecting';
+        badge.textContent = 'Подключение…';
+      }
+    }
+
+    // ── scrcpy protocol + WebCodecs H264 декодер ─────────────────────────────
+    let decoder = null;
+    let deviceWidth = 0, deviceHeight = 0;
+    let headerParsed = false;
+
+    // Буфер для сборки входящих бинарных данных
+    let recvBuf = new Uint8Array(0);
+
+    function appendBuf(existing, incoming) {
+      const tmp = new Uint8Array(existing.length + incoming.length);
+      tmp.set(existing, 0);
+      tmp.set(incoming, existing.length);
+      return tmp;
+    }
+
+    function initDecoder(width, height) {
+      deviceWidth  = width;
+      deviceHeight = height;
+      canvas.width  = width;
+      canvas.height = height;
+
+      if (!('VideoDecoder' in window)) {
+        document.getElementById('overlay-text').textContent =
+          'Браузер не поддерживает WebCodecs. Используйте Chrome 94+.';
+        return;
+      }
+
+      decoder = new VideoDecoder({
+        output: frame => {
+          ctx.drawImage(frame, 0, 0);
+          frame.close();
+        },
+        error: e => console.error('VideoDecoder error:', e),
+      });
+
+      decoder.configure({
+        codec: 'avc1.42001f',  // H264 Baseline
+        codedWidth: width,
+        codedHeight: height,
+        optimizeForLatency: true,
+      });
+
+      setStatus('connected');
+    }
+
+    // Определяем keyframe по первому байту NAL unit (тип 5 = IDR)
+    function isKeyframe(data) {
+      // Ищем NAL unit start code 00 00 00 01 или 00 00 01
+      for (let i = 0; i < Math.min(data.length - 4, 16); i++) {
+        if (data[i] === 0 && data[i+1] === 0) {
+          if (data[i+2] === 0 && data[i+3] === 1) {
+            return (data[i+4] & 0x1F) === 5;
+          }
+          if (data[i+2] === 1) {
+            return (data[i+3] & 0x1F) === 5;
+          }
+        }
+      }
+      return false;
+    }
+
+    function processBuffer() {
+      if (!headerParsed) {
+        // scrcpy header: 64 bytes device name + 4 bytes width + 4 bytes height = 72 bytes
+        if (recvBuf.length < 72) return;
+        const view = new DataView(recvBuf.buffer);
+        const width  = view.getInt32(64, false);
+        const height = view.getInt32(68, false);
+        recvBuf = recvBuf.slice(72);
+        headerParsed = true;
+        initDecoder(width, height);
+      }
+
+      if (!decoder) return;
+
+      // Каждый пакет: 8 bytes PTS + 4 bytes size + <size> bytes H264 data
+      while (recvBuf.length >= 12) {
+        const view = new DataView(recvBuf.buffer, recvBuf.byteOffset);
+        // PTS: 8 bytes (игнорируем старший int32, используем младший как мкс)
+        const ptsHi = view.getUint32(0, false);
+        const ptsLo = view.getUint32(4, false);
+        const pts   = ptsHi * 4294967296 + ptsLo;  // микросекунды
+
+        const size = view.getUint32(8, false);
+        if (recvBuf.length < 12 + size) break;
+
+        const nalData = recvBuf.slice(12, 12 + size);
+        recvBuf = recvBuf.slice(12 + size);
+
+        try {
+          decoder.decode(new EncodedVideoChunk({
+            type: isKeyframe(nalData) ? 'key' : 'delta',
+            timestamp: pts,
+            data: nalData,
+          }));
+        } catch (e) {
+          console.warn('decode error:', e);
+        }
+      }
+    }
+
+    // ── WebSocket обработчики ─────────────────────────────────────────────────
+    socket.binaryType = 'arraybuffer';
+
+    socket.onopen = () => {
+      setStatus('connecting');
+    };
+
+    socket.onmessage = (event) => {
+      if (typeof event.data === 'string') return;
+      recvBuf = appendBuf(recvBuf, new Uint8Array(event.data));
+      processBuffer();
+    };
+
+    socket.onerror = () => {
+      setStatus('disconnected');
+      document.getElementById('overlay-text').textContent = 'Ошибка подключения';
+      overlay.classList.remove('hidden');
+    };
+
+    socket.onclose = () => {
+      if (!document.getElementById('session-msg').classList.contains('show')) {
+        showMessage('Соединение с устройством разорвано.');
+      }
+      setStatus('disconnected');
+    };
+
+    // ── Touch/Mouse ввод → scrcpy control messages ────────────────────────────
+    const TOUCH_ACTION = { down: 0, up: 1, move: 2 };
+    const KEYEVENT_ACTION = { down: 0, up: 1 };
+
+    function sendControlMsg(buf) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(buf);
+    }
+
+    function buildTouchMsg(action, pointerId, x, y, w, h, pressure) {
+      const buf = new ArrayBuffer(28);
+      const v = new DataView(buf);
+      v.setUint8(0, 2);          // INJECT_TOUCH_EVENT
+      v.setUint8(1, action);
+      v.setBigInt64(2, BigInt(pointerId), false);
+      v.setInt32(10, Math.round(x), false);
+      v.setInt32(14, Math.round(y), false);
+      v.setUint16(18, Math.round(w), false);
+      v.setUint16(20, Math.round(h), false);
+      v.setFloat32(22, pressure, false);
+      v.setUint32(24, 1, false);  // AMOTION_EVENT_BUTTON_PRIMARY
+      return buf;
+    }
+
+    function canvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = deviceWidth  / rect.width;
+      const scaleY = deviceHeight / rect.height;
+      const clientX = e.clientX ?? e.touches[0].clientX;
+      const clientY = e.clientY ?? e.touches[0].clientY;
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top)  * scaleY,
+      };
+    }
+
+    // Mouse
+    canvas.addEventListener('mousedown', e => {
+      const { x, y } = canvasCoords(e);
+      sendControlMsg(buildTouchMsg(TOUCH_ACTION.down, 0, x, y, deviceWidth, deviceHeight, 1.0));
+    });
+    canvas.addEventListener('mousemove', e => {
+      if (e.buttons === 0) return;
+      const { x, y } = canvasCoords(e);
+      sendControlMsg(buildTouchMsg(TOUCH_ACTION.move, 0, x, y, deviceWidth, deviceHeight, 1.0));
+    });
+    canvas.addEventListener('mouseup', e => {
+      const { x, y } = canvasCoords(e);
+      sendControlMsg(buildTouchMsg(TOUCH_ACTION.up, 0, x, y, deviceWidth, deviceHeight, 0.0));
+    });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Touch
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      Array.from(e.changedTouches).forEach(t => {
+        const { x, y } = canvasCoords(t);
+        sendControlMsg(buildTouchMsg(TOUCH_ACTION.down, t.identifier, x, y, deviceWidth, deviceHeight, t.force || 1.0));
+      });
+    }, { passive: false });
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      Array.from(e.changedTouches).forEach(t => {
+        const { x, y } = canvasCoords(t);
+        sendControlMsg(buildTouchMsg(TOUCH_ACTION.move, t.identifier, x, y, deviceWidth, deviceHeight, t.force || 1.0));
+      });
+    }, { passive: false });
+    canvas.addEventListener('touchend', e => {
+      e.preventDefault();
+      Array.from(e.changedTouches).forEach(t => {
+        const { x, y } = canvasCoords(t);
+        sendControlMsg(buildTouchMsg(TOUCH_ACTION.up, t.identifier, x, y, deviceWidth, deviceHeight, 0.0));
+      });
+    }, { passive: false });
+  </script>
+</body>
+</html>
