@@ -48,9 +48,25 @@ if (-not $py) {
     exit 1
 }
 
-# Install dependencies
-Write-Host "`nInstalling Python dependencies..." -ForegroundColor Yellow
-& $py -m pip install -r "$PSScriptRoot\requirements.txt" --quiet
+# Setup venv
+$venvDir = "$PSScriptRoot\.venv"
+if (-not (Test-Path "$venvDir\Scripts\python.exe")) {
+    Write-Host "`nCreating virtual environment..." -ForegroundColor Yellow
+    & $py -m venv $venvDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Failed to create venv" -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+    Write-Host "OK: venv created at $venvDir" -ForegroundColor Green
+} else {
+    Write-Host "`nUsing existing venv: $venvDir" -ForegroundColor Green
+}
+$venvPy = "$venvDir\Scripts\python.exe"
+
+# Install dependencies into venv
+Write-Host "`nInstalling Python dependencies into venv..." -ForegroundColor Yellow
+& $venvPy -m pip install -r "$PSScriptRoot\requirements.txt" --quiet
 if ($LASTEXITCODE -ne 0) {
     Write-Host "WARNING: pip install failed, continuing anyway..." -ForegroundColor Yellow
 }
@@ -62,4 +78,4 @@ Write-Host "`nStarting ADB server..." -ForegroundColor Yellow
 # Start web-scrcpy
 Write-Host "`nStarting web-scrcpy on port 5000..." -ForegroundColor Green
 Write-Host "Press Ctrl+C to stop.`n"
-& $py "$PSScriptRoot\app.py"
+& $venvPy "$PSScriptRoot\app.py"

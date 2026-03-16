@@ -42,8 +42,22 @@ pause & exit /b 1
 %PY% --version
 
 echo.
-echo Installing Python dependencies...
-%PY% -m pip install -r "%~dp0requirements.txt" --quiet
+set VENV=%~dp0.venv
+if exist "%VENV%\Scripts\python.exe" (
+    echo Using existing venv: %VENV%
+) else (
+    echo Creating virtual environment...
+    %PY% -m venv "%VENV%"
+    if errorlevel 1 (
+        echo [ERROR] Failed to create venv.
+        pause & exit /b 1
+    )
+)
+set VENV_PY=%VENV%\Scripts\python.exe
+
+echo.
+echo Installing Python dependencies into venv...
+"%VENV_PY%" -m pip install -r "%~dp0requirements.txt" --quiet
 
 echo.
 echo Starting ADB server...
@@ -54,5 +68,5 @@ echo Starting web-scrcpy on port 5000...
 echo Press Ctrl+C to stop.
 echo.
 cd /d "%~dp0"
-%PY% app.py
+"%VENV_PY%" app.py
 pause
