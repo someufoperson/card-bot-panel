@@ -1,3 +1,4 @@
+import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +24,7 @@ class SettingsRepository:
             .values(key=key, value=value)
             .on_conflict_do_update(
                 index_elements=["key"],
-                set_={"value": value, "updated_at": Setting.updated_at.default.arg},
+                set_={"value": value, "updated_at": sa.text("NOW()")},
             )
             .returning(Setting)
         )
