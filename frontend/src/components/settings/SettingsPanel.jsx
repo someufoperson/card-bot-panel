@@ -2,30 +2,8 @@ import { useEffect, useState } from 'react'
 import { listSettings, bulkUpdateSettings } from '../../api/settings'
 import { useApp } from '../../context/AppContext'
 
-function PasswordField({ value, onChange, placeholder }) {
-  const [show, setShow] = useState(false)
-  return (
-    <div className="password-wrap">
-      <input
-        className="input mono"
-        type={show ? 'text' : 'password'}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-      <button
-        type="button"
-        className="password-toggle"
-        onClick={() => setShow(s => !s)}
-        title={show ? 'Скрыть' : 'Показать'}
-      >
-        {show ? '🙈' : '👁'}
-      </button>
-    </div>
-  )
-}
 
-const PHASE1_KEYS = ['inactivity_timeout', 'device_domain', 'bot_token', 'allowed_user_id']
+const PHASE1_KEYS = ['inactivity_timeout', 'device_domain', 'video_folder']
 
 export default function SettingsPanel() {
   const { reloadSettings } = useApp()
@@ -86,6 +64,7 @@ export default function SettingsPanel() {
             min={1}
             value={values.inactivity_timeout ?? '10'}
             onChange={e => set('inactivity_timeout', e.target.value)}
+            style={{ MozAppearance: 'textfield', appearance: 'textfield' }}
           />
         </div>
 
@@ -103,22 +82,16 @@ export default function SettingsPanel() {
         </div>
 
         <div className="form-group">
-          <label className="label">Telegram Bot Token</label>
-          <PasswordField
-            value={values.bot_token ?? ''}
-            onChange={v => set('bot_token', v)}
-            placeholder="123456:ABCdef…"
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Telegram User ID (администратор)</label>
+          <label className="label">Папка для видеозаписей</label>
           <input
             className="input mono"
-            value={values.allowed_user_id ?? ''}
-            onChange={e => set('allowed_user_id', e.target.value)}
-            placeholder="123456789"
+            value={values.video_folder ?? ''}
+            onChange={e => set('video_folder', e.target.value)}
+            placeholder="C:\Videos или /home/user/videos"
           />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+            Путь к папке, куда будут сохраняться записи с устройств
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

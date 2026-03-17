@@ -13,5 +13,8 @@ class Settings(BaseSettings):
     # URL FastAPI внутри Docker-сети
     fastapi_url: str = "http://backend:8000"
 
+    # Домен устройств (fallback если не задан в настройках панели)
+    device_domain: str = "http://localhost"
+
 
 settings = Settings()

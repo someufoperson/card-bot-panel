@@ -7,7 +7,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import settings
-from handlers import card_add
+from handlers import card_add, my_cards
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +22,7 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(my_cards.router)
     dp.include_router(card_add.router)
 
     logger.info("Бот запущен (polling)")

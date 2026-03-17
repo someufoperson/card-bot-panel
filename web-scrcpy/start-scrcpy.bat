@@ -68,5 +68,5 @@ echo Starting web-scrcpy on port 5000...
 echo Press Ctrl+C to stop.
 echo.
 cd /d "%~dp0"
-"%VENV_PY%" app.py
+"%VENV_PY%" host_server\app.py
 pause

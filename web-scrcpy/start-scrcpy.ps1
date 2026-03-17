@@ -78,4 +78,4 @@ Write-Host "`nStarting ADB server..." -ForegroundColor Yellow
 # Start web-scrcpy
 Write-Host "`nStarting web-scrcpy on port 5000..." -ForegroundColor Green
 Write-Host "Press Ctrl+C to stop.`n"
-& $venvPy "$PSScriptRoot\app.py"
+& $venvPy "$PSScriptRoot\host_server\app.py"

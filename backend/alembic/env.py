@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
 from app.models.base import Base
 from app.models.card import Card  # noqa: F401
+from app.models.card_block import CardBlock  # noqa: F401
+from app.models.device_log import DeviceLog  # noqa: F401
+from app.models.pending_card import PendingCard  # noqa: F401
 from app.models.setting import Setting  # noqa: F401
 
 config = context.config

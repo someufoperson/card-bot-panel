@@ -1,3 +1,7 @@
-flask>=3.0.0
-flask-sock>=0.2.0
-redis>=5.0.0
+flask
+flask-socketio[gevent]
+gevent
+requests
+loguru
+pydantic-settings
+redis

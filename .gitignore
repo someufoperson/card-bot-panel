@@ -41,3 +41,11 @@ backend/alembic/versions/__pycache__/
 
 # Данные БД (если монтируются локально)
 postgres_data/
+
+# Claude Code
+.claude/
+
+# web-scrcpy runtime artifacts
+web-scrcpy/logs/
+web-scrcpy/host_server/recordings/
+web-scrcpy/host_server/__pycache__/

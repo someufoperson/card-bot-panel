@@ -1,31 +1,24 @@
 import logging
+import re
 
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from services.api_client import create_card, get_setting
+from services.api_client import create_card, delete_pending, get_pending, save_pending
 from services.gemini_client import gemini_client
 from config import settings
+
+# Сообщение считается потенциальной картой если содержит 16 цифр
+# (возможно с пробелами/дефисами между группами по 4)
+_RE_CARD = re.compile(r'\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}')
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Хранилище: user_id → распознанные данные карты
-_pending: dict[int, dict] = {}
 
-
-# ── Авторизация ──────────────────────────────────────────────────────────────
-
-async def _get_allowed_id() -> str:
-    """Получает allowed_user_id из настроек панели, fallback — env."""
-    from_api = await get_setting("allowed_user_id")
-    return (from_api or settings.telegram_allowed_user_id).strip()
-
-
-async def _is_allowed(user_id: int) -> bool:
-    allowed = await _get_allowed_id()
-    return not allowed or str(user_id) == allowed
+def _looks_like_card(text: str) -> bool:
+    return bool(_RE_CARD.search(text))
 
 
 # ── Форматирование карточки подтверждения ─────────────────────────────────────
@@ -47,17 +40,15 @@ def _fmt_card(data: dict) -> str:
         f"👤 ФИО: {data.get('full_name') or '—'}\n"
         f"🏦 Банк: {data.get('bank') or '—'}\n"
         f"💳 Карта: {card_num}\n"
-        f"📱 Телефон: {data.get('phone_number') or '—'}\n"
-        f"📅 Дата покупки: {purchase or '—'}\n"
-        f"🗂 Группа: {data.get('group_name') or 'не указана'}"
+        f"📱 Телефон: {data.get('phone_number') or '—'}"
     )
 
 
-def _confirmation_keyboard() -> InlineKeyboardMarkup:
+def _confirmation_keyboard(msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Подтвердить", callback_data="card:confirm"),
-        InlineKeyboardButton(text="✏️ Исправить",  callback_data="card:edit"),
-        InlineKeyboardButton(text="❌ Отмена",      callback_data="card:cancel"),
+        InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"card:confirm:{msg_id}"),
+        InlineKeyboardButton(text="✏️ Исправить",  callback_data=f"card:edit:{msg_id}"),
+        InlineKeyboardButton(text="❌ Отмена",      callback_data=f"card:cancel:{msg_id}"),
     ]])
 
 
@@ -65,8 +56,6 @@ def _confirmation_keyboard() -> InlineKeyboardMarkup:
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    if not await _is_allowed(message.from_user.id):
-        return
     await message.answer(
         "👋 Привет! Отправь данные карты в любом формате, и я добавлю её в панель."
     )
@@ -76,8 +65,7 @@ async def cmd_start(message: Message):
 
 @router.message(F.text)
 async def handle_text(message: Message):
-    if not await _is_allowed(message.from_user.id):
-        logger.warning("Отклонено сообщение от user_id=%s", message.from_user.id)
+    if not _looks_like_card(message.text):
         return
 
     if not settings.gemini_api_key:
@@ -96,34 +84,43 @@ async def handle_text(message: Message):
         return
 
     from datetime import date
-    card_data["purchase_date"] = date.today().isoformat()
+    if not card_data.get("purchase_date"):
+        card_data["purchase_date"] = date.today().isoformat()
 
-    _pending[message.from_user.id] = card_data
+    chat = message.chat
+    card_data["group_name"] = chat.title or chat.full_name or chat.username or ""
+
+    await save_pending(processing_msg.message_id, message.from_user.id, card_data)
 
     await processing_msg.edit_text(
         _fmt_card(card_data),
-        reply_markup=_confirmation_keyboard(),
+        reply_markup=_confirmation_keyboard(processing_msg.message_id),
     )
 
 
 # ── Callback: подтвердить ─────────────────────────────────────────────────────
 
-@router.callback_query(F.data == "card:confirm")
+@router.callback_query(F.data.startswith("card:confirm:"))
 async def cb_confirm(callback: CallbackQuery):
-    if not await _is_allowed(callback.from_user.id):
-        await callback.answer()
-        return
-
-    card_data = _pending.pop(callback.from_user.id, None)
+    msg_id = int(callback.data.split(":")[-1])
+    card_data = await get_pending(msg_id)
     if not card_data:
         await callback.answer("Данные устарели. Отправь карту заново.", show_alert=True)
         return
 
+    await delete_pending(msg_id)
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
 
     try:
         payload = {k: v for k, v in card_data.items() if v is not None}
+        if "phone_number" in payload and payload["phone_number"]:
+            import re as _re
+            digits = _re.sub(r"\D", "", payload["phone_number"])
+            if len(digits) == 11 and digits[0] in ("7", "8"):
+                payload["phone_number"] = "+7" + digits[1:]
+            elif len(digits) != 11:
+                payload.pop("phone_number", None)
         await create_card(payload)
         await callback.message.answer("✅ Карта успешно добавлена в панель!")
     except Exception as exc:
@@ -133,13 +130,10 @@ async def cb_confirm(callback: CallbackQuery):
 
 # ── Callback: исправить ───────────────────────────────────────────────────────
 
-@router.callback_query(F.data == "card:edit")
+@router.callback_query(F.data.startswith("card:edit:"))
 async def cb_edit(callback: CallbackQuery):
-    if not await _is_allowed(callback.from_user.id):
-        await callback.answer()
-        return
-
-    _pending.pop(callback.from_user.id, None)
+    msg_id = int(callback.data.split(":")[-1])
+    await delete_pending(msg_id)
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer(
@@ -149,13 +143,10 @@ async def cb_edit(callback: CallbackQuery):
 
 # ── Callback: отмена ─────────────────────────────────────────────────────────
 
-@router.callback_query(F.data == "card:cancel")
+@router.callback_query(F.data.startswith("card:cancel:"))
 async def cb_cancel(callback: CallbackQuery):
-    if not await _is_allowed(callback.from_user.id):
-        await callback.answer()
-        return
-
-    _pending.pop(callback.from_user.id, None)
+    msg_id = int(callback.data.split(":")[-1])
+    await delete_pending(msg_id)
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer("❌ Отменено.")

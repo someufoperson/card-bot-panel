@@ -13,6 +13,8 @@ async def create_card(card_data: dict) -> dict:
     """POST /api/v1/cards — создаёт карту в панели."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(f"{_BASE}/api/v1/cards", json=card_data)
+        if resp.is_error:
+            logger.error("create_card failed %s: %s", resp.status_code, resp.text)
         resp.raise_for_status()
         return resp.json()
 
@@ -27,3 +29,71 @@ async def get_setting(key: str) -> str | None:
     except Exception as exc:
         logger.warning("Не удалось получить настройку %s: %s", key, exc)
     return None
+
+
+async def get_card_by_id(card_id: str) -> dict | None:
+    """GET /api/v1/cards/{card_id} — получает карту по ID."""
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(f"{_BASE}/api/v1/cards/{card_id}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_all_cards() -> list[dict]:
+    """GET /api/v1/cards — все карты (для администратора)."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(f"{_BASE}/api/v1/cards", params={"limit": 200})
+        resp.raise_for_status()
+        return resp.json()["items"]
+
+
+async def get_cards_by_user(username: str) -> list[dict]:
+    """GET /api/v1/cards?user=@username — карты где пользователь указан как ответственный."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"{_BASE}/api/v1/cards",
+            params={"user": username, "limit": 200},
+        )
+        resp.raise_for_status()
+        return resp.json()["items"]
+
+
+async def block_card(card_id: str) -> None:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(f"{_BASE}/api/v1/cards/{card_id}/blocks", json={})
+        resp.raise_for_status()
+
+
+async def unblock_card(card_id: str) -> None:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.delete(f"{_BASE}/api/v1/cards/{card_id}/blocks/active")
+        resp.raise_for_status()
+
+
+async def save_pending(message_id: int, user_id: int, data: dict) -> None:
+    """POST /api/v1/pending-cards — сохраняет ожидающую карту в БД."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            f"{_BASE}/api/v1/pending-cards",
+            json={"message_id": message_id, "user_id": user_id, "data": data},
+        )
+        resp.raise_for_status()
+
+
+async def get_pending(message_id: int) -> dict | None:
+    """GET /api/v1/pending-cards/{message_id} — получает данные карты по id сообщения."""
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(f"{_BASE}/api/v1/pending-cards/{message_id}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()["data"]
+
+
+async def delete_pending(message_id: int) -> None:
+    """DELETE /api/v1/pending-cards/{message_id} — удаляет запись после подтверждения/отмены."""
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.delete(f"{_BASE}/api/v1/pending-cards/{message_id}")
+        resp.raise_for_status()

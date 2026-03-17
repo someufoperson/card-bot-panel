@@ -10,8 +10,12 @@ export function listCards({ search, bank, group, page = 1, limit = 50 } = {}) {
   return api.get(`/cards?${params}`)
 }
 
-export const createCard   = (data)       => api.post('/cards', data)
-export const getCard      = (id)         => api.get(`/cards/${id}`)
-export const updateCard   = (id, data)   => api.put(`/cards/${id}`, data)
-export const deleteCard   = (id)         => api.delete(`/cards/${id}`)
-export const getCardTxns  = (id)         => api.get(`/cards/${id}/transactions`)
+export const listCardNames  = ()         => api.get('/cards/names')
+export const createCard     = (data)     => api.post('/cards', data)
+export const getCard        = (id)       => api.get(`/cards/${id}`)
+export const updateCard     = (id, data) => api.put(`/cards/${id}`, data)
+export const deleteCard     = (id)       => api.delete(`/cards/${id}`)
+export const getCardTxns    = (id)       => api.get(`/cards/${id}/transactions`)
+export const blockCard      = (id, blockedAt)   => api.post(`/cards/${id}/blocks`, blockedAt ? { blocked_at: blockedAt } : {})
+export const unblockCard    = (id, unblockedAt) => api.delete(`/cards/${id}/blocks/active`, unblockedAt ? { unblocked_at: unblockedAt } : undefined)
+export const getCardBlocks  = (id)       => api.get(`/cards/${id}/blocks`)

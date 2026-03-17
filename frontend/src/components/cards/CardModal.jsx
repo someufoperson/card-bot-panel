@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { createCard } from '../../api/cards'
+import DeviceSelect from './DeviceSelect'
 
 const EMPTY = {
   full_name: '', bank: '', card_number: '', phone_number: '',
-  purchase_date: '', group_name: '',
+  device_id: '', purchase_date: '', pickup_date: '', group_name: '',
+  balance: '0', monthly_turnover: '0', responsible_user: '',
+  folder_link: '', comment: '',
 }
 
 function validate(form) {
@@ -17,8 +20,8 @@ function validate(form) {
 }
 
 export default function CardModal({ onClose, onCreated }) {
-  const [form, setForm]     = useState(EMPTY)
-  const [errors, setErrors] = useState({})
+  const [form, setForm]       = useState(EMPTY)
+  const [errors, setErrors]   = useState({})
   const [loading, setLoading] = useState(false)
 
   const set = (field, value) => {
@@ -34,10 +37,17 @@ export default function CardModal({ onClose, onCreated }) {
     setLoading(true)
     try {
       const payload = { ...form }
-      if (!payload.bank)          delete payload.bank
-      if (!payload.phone_number)  delete payload.phone_number
-      if (!payload.purchase_date) delete payload.purchase_date
-      if (!payload.group_name)    delete payload.group_name
+      if (!payload.bank)             delete payload.bank
+      if (!payload.phone_number)     delete payload.phone_number
+      if (!payload.purchase_date)    delete payload.purchase_date
+      if (!payload.device_id)        delete payload.device_id
+      if (!payload.pickup_date)      delete payload.pickup_date
+      if (!payload.group_name)       delete payload.group_name
+      if (!payload.balance)          delete payload.balance
+      if (!payload.monthly_turnover) delete payload.monthly_turnover
+      if (!payload.responsible_user) delete payload.responsible_user
+      if (!payload.folder_link)      delete payload.folder_link
+      if (!payload.comment)          delete payload.comment
 
       await createCard(payload)
       onCreated()
@@ -97,6 +107,11 @@ export default function CardModal({ onClose, onCreated }) {
           </div>
 
           <div className="form-group">
+            <label className="label">Ссылка</label>
+            <DeviceSelect value={form.device_id} onChange={v => set('device_id', v)} />
+          </div>
+
+          <div className="form-group">
             <label className="label">Номер карты * (16 цифр)</label>
             <input
               className={`input mono ${errors.card_number ? 'input-error' : ''}`}
@@ -108,17 +123,18 @@ export default function CardModal({ onClose, onCreated }) {
             {errors.card_number && <div className="error-msg">{errors.card_number}</div>}
           </div>
 
+          <div className="form-group">
+            <label className="label">Телефон</label>
+            <input
+              className={`input ${errors.phone_number ? 'input-error' : ''}`}
+              value={form.phone_number}
+              onChange={e => set('phone_number', e.target.value)}
+              placeholder="+79001234567"
+            />
+            {errors.phone_number && <div className="error-msg">{errors.phone_number}</div>}
+          </div>
+
           <div className="form-row">
-            <div className="form-group">
-              <label className="label">Телефон</label>
-              <input
-                className={`input ${errors.phone_number ? 'input-error' : ''}`}
-                value={form.phone_number}
-                onChange={e => set('phone_number', e.target.value)}
-                placeholder="+79001234567"
-              />
-              {errors.phone_number && <div className="error-msg">{errors.phone_number}</div>}
-            </div>
             <div className="form-group">
               <label className="label">Дата покупки</label>
               <input
@@ -129,6 +145,65 @@ export default function CardModal({ onClose, onCreated }) {
                 style={{ colorScheme: 'dark' }}
               />
             </div>
+            <div className="form-group">
+              <label className="label">Дата забора</label>
+              <input
+                className="input"
+                type="date"
+                value={form.pickup_date}
+                onChange={e => set('pickup_date', e.target.value)}
+                style={{ colorScheme: 'dark' }}
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="label">Баланс</label>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={form.balance}
+                onChange={e => set('balance', e.target.value)}
+                placeholder="0.00"
+                style={{ MozAppearance: 'textfield', appearance: 'textfield' }}
+              />
+            </div>
+            <div className="form-group">
+              <label className="label">Оборот за месяц</label>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={form.monthly_turnover}
+                onChange={e => set('monthly_turnover', e.target.value)}
+                placeholder="0.00"
+                style={{ MozAppearance: 'textfield', appearance: 'textfield' }}
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="label">Пользователь (ответственный)</label>
+            <input
+              className="input"
+              value={form.responsible_user}
+              onChange={e => set('responsible_user', e.target.value)}
+              placeholder="Имя пользователя"
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="label">Комментарий</label>
+            <textarea
+              className="input"
+              value={form.comment}
+              onChange={e => set('comment', e.target.value)}
+              placeholder="Произвольный комментарий"
+              rows={2}
+              style={{ resize: 'vertical' }}
+            />
           </div>
 
           <div className="modal-footer">
