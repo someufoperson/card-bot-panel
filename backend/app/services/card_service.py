@@ -125,6 +125,9 @@ class CardService:
         return _to_response(card, block, devices.get(card.device_id))
 
     async def create(self, data: CardCreate) -> CardResponse:
+        existing = await self._repo.get_by_card_number(data.card_number)
+        if existing:
+            raise HTTPException(status_code=409, detail="Карта с таким номером уже существует")
         card = Card(
             full_name=data.full_name,
             bank=data.bank,
@@ -162,6 +165,9 @@ class CardService:
             if field in data.model_fields_set and getattr(data, field) is None:
                 updates[field] = None
         if "card_number" in updates:
+            existing = await self._repo.get_by_card_number(updates["card_number"])
+            if existing and existing.id != card_id:
+                raise HTTPException(status_code=409, detail="Карта с таким номером уже существует")
             updates["card_last4"] = updates["card_number"][-4:]
 
         card = await self._repo.update(card, updates)
@@ -170,6 +176,9 @@ class CardService:
         block = await self._repo.get_active_block(card_id)
         devices = await _fetch_devices_by_ids(self._session, [card.device_id] if card.device_id else [])
         return _to_response(card, block, devices.get(card.device_id))
+
+    async def check_exists(self, card_number: str) -> bool:
+        return await self._repo.get_by_card_number(card_number) is not None
 
     async def get_names(self) -> list[str]:
         return await self._repo.get_distinct_names()

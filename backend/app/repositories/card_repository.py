@@ -53,6 +53,10 @@ class CardRepository:
         result = await self._session.execute(select(Card).where(Card.id == card_id))
         return result.scalar_one_or_none()
 
+    async def get_by_card_number(self, card_number: str) -> Card | None:
+        result = await self._session.execute(select(Card).where(Card.card_number == card_number))
+        return result.scalar_one_or_none()
+
     async def insert(self, card: Card) -> Card:
         self._session.add(card)
         await self._session.flush()

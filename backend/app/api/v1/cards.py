@@ -19,6 +19,14 @@ async def list_card_names(service: CardService = Depends(_get_service)):
     return await service.get_names()
 
 
+@router.get("/check")
+async def check_card_exists(
+    card_number: str = Query(...),
+    service: CardService = Depends(_get_service),
+):
+    return {"exists": await service.check_exists(card_number)}
+
+
 @router.get("", response_model=CardListResponse)
 async def list_cards(
     search: str | None = Query(None),

@@ -14,7 +14,7 @@ class Card(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     full_name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     bank: Mapped[str | None] = mapped_column(VARCHAR(100))
-    card_number: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
+    card_number: Mapped[str] = mapped_column(VARCHAR(20), nullable=False, unique=True)
     card_last4: Mapped[str] = mapped_column(VARCHAR(4), nullable=False)
     phone_number: Mapped[str | None] = mapped_column(VARCHAR(20))
     device_id: Mapped[uuid.UUID | None] = mapped_column(

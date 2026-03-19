@@ -15,9 +15,25 @@ async def create_card(card_data: dict) -> dict:
         resp = await client.post(f"{_BASE}/api/v1/cards", json=card_data)
         if resp.is_error:
             logger.error("create_card failed %s: %s", resp.status_code, resp.text)
-        resp.raise_for_status()
+            try:
+                detail = resp.json().get("detail", f"Ошибка {resp.status_code}")
+            except Exception:
+                detail = f"Ошибка {resp.status_code}"
+            raise Exception(detail)
         return resp.json()
 
+
+
+async def card_number_exists(card_number: str) -> bool:
+    """GET /api/v1/cards/check — проверяет, есть ли карта с таким номером в базе."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{_BASE}/api/v1/cards/check", params={"card_number": card_number})
+            resp.raise_for_status()
+            return resp.json()["exists"]
+    except Exception as exc:
+        logger.warning("Не удалось проверить наличие карты: %s", exc)
+        return False
 
 
 async def get_setting(key: str) -> str | None:

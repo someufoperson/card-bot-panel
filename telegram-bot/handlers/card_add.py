@@ -6,7 +6,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from services.api_client import create_card, delete_pending, get_donor_chat_ids, get_pending, get_setting, save_pending
+from services.api_client import card_number_exists, create_card, delete_pending, get_donor_chat_ids, get_pending, get_setting, save_pending
 from services.gemini_client import gemini_client
 from config import settings
 
@@ -96,6 +96,11 @@ async def handle_text(message: Message):
     if str(message.chat.id) not in donor_ids:
         return
 
+    card_number = re.sub(r"\D", "", _RE_CARD.search(message.text).group())
+    if await card_number_exists(card_number):
+        await message.answer(f"⚠️ Карта *{card_number[-4:]} уже есть в базе.")
+        return
+
     if not settings.gemini_api_key:
         await message.answer("⚠️ Gemini API ключ не настроен. Укажи его в настройках панели.")
         return
@@ -136,6 +141,11 @@ async def handle_photo(message: Message):
 
     caption = message.caption or ""
     if not _looks_like_card(caption):
+        return
+
+    card_number = re.sub(r"\D", "", _RE_CARD.search(caption).group())
+    if await card_number_exists(card_number):
+        await message.answer(f"⚠️ Карта *{card_number[-4:]} уже есть в базе.")
         return
 
     if not settings.gemini_api_key:
