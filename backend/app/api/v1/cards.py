@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
-from app.schemas.card import CardBlockCreate, CardBlockResponse, CardCreate, CardListResponse, CardResponse, CardUnblockCreate, CardUpdate
+from app.schemas.card import CardBlockCreate, CardBlockResponse, CardCreate, CardListResponse, CardResponse, CardSendRequest, CardUnblockCreate, CardUpdate
 from app.services.card_service import CardService
 
 router = APIRouter()
@@ -30,6 +30,14 @@ async def list_cards(
     service: CardService = Depends(_get_service),
 ):
     return await service.get_all(search, bank, group, page, limit, user)
+
+
+@router.post("/send", status_code=204)
+async def send_cards(
+    data: CardSendRequest,
+    service: CardService = Depends(_get_service),
+):
+    await service.send_cards(data.card_ids)
 
 
 @router.post("", response_model=CardResponse, status_code=201)

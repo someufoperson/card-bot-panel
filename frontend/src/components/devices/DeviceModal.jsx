@@ -1,22 +1,16 @@
 import { useEffect, useState } from 'react'
-import { listCardNames } from '../../api/cards'
 import { createDevice, updateDevice, listDevices } from '../../api/devices'
 
 export default function DeviceModal({ device, onClose, onSaved }) {
   const isEdit = !!device?.id
 
-  const [serial,       setSerial]       = useState(device?.serial     ?? '')
-  const [label,        setLabel]        = useState(device?.label      ?? '')
-  const [ownerName,    setOwnerName]    = useState(device?.owner_name ?? '')
-  const [names,        setNames]        = useState([])
+  const [serial,       setSerial]       = useState(device?.serial ?? '')
+  const [label,        setLabel]        = useState(device?.label  ?? '')
   const [unregistered, setUnregistered] = useState([])
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState(null)
 
   useEffect(() => {
-    listCardNames()
-      .then(list => setNames(list))
-      .catch(() => {})
     if (!isEdit) {
       listDevices()
         .then(d => {
@@ -30,16 +24,15 @@ export default function DeviceModal({ device, onClose, onSaved }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!label.trim() && !ownerName.trim()) {
-      setError('Укажите название или выберите владельца')
+    if (!label.trim()) {
+      setError('Укажите название устройства')
       return
     }
     setSaving(true)
     setError(null)
     try {
       const payload = {
-        label:      label.trim()     || null,
-        owner_name: ownerName.trim() || null,
+        label: label.trim() || null,
       }
       if (isEdit) {
         await updateDevice(device.serial, payload)
@@ -112,28 +105,6 @@ export default function DeviceModal({ device, onClose, onSaved }) {
               />
             </div>
 
-            <div className="form-group">
-              <label className="label">Владелец</label>
-              <select
-                className="input"
-                value={ownerName}
-                onChange={e => setOwnerName(e.target.value)}
-              >
-                <option value="">— не указан —</option>
-                {names.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-              {names.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Нет карт в базе — сначала добавьте карту
-                </div>
-              )}
-            </div>
-
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-              Необходимо указать название <em>или</em> выбрать владельца.
-            </p>
           </div>
 
           <div className="modal-footer">

@@ -167,7 +167,6 @@ export default function DevicesTab() {
                 <tr>
                   <th>Serial</th>
                   <th>Название</th>
-                  <th>Владелец</th>
                   <th>Статус</th>
                   <th>Доступ</th>
                   <th>Подключён</th>
@@ -177,7 +176,7 @@ export default function DevicesTab() {
               <tbody>
                 {registered.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       <div className="empty-state">
                         <div>Нет зарегистрированных устройств</div>
                         <p>Нажмите «Зарегистрировать» чтобы добавить устройство</p>
@@ -192,7 +191,6 @@ export default function DevicesTab() {
                   >
                     <td className="td-mono" style={{ fontSize: 12 }}>{d.serial}</td>
                     <td>{d.label || '—'}</td>
-                    <td>{d.owner_name || '—'}</td>
                     <td><Dot type={d.status} /></td>
                     <td><Dot type={d.session_status} /></td>
                     <td><Dot type={d.connected ? 'connected' : 'disconnected'} /></td>

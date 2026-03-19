@@ -144,3 +144,7 @@ class CardListResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class CardSendRequest(BaseModel):
+    card_ids: list[uuid.UUID]

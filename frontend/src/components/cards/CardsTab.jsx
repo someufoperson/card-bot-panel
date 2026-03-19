@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { deleteCard, listCards } from '../../api/cards'
+import { deleteCard, listCards, sendCards } from '../../api/cards'
 import { useApp } from '../../context/AppContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useSSE } from '../../hooks/useSSE'
@@ -19,14 +19,23 @@ export default function CardsTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
 
-  const [search, setSearch]           = useState('')
-  const [bankFilter, setBankFilter]   = useState('')
-  const [groupFilter, setGroupFilter] = useState('')
+  const [search, setSearch] = useState('')
 
-  const [blockSort, setBlockSort] = useState(0) // 0=нет, 1=незаблок. выше, 2=заблок. выше
+  const [selected, setSelected] = useState(new Set())
 
-  const [showAddModal, setShowAddModal]   = useState(false)
-  const [editCard, setEditCard]           = useState(null)
+  const [sortCol, setSortCol] = useState(null)   // null | 'balance' | 'turnover'
+  const [sortDir, setSortDir] = useState('asc')  // 'asc' | 'desc'
+
+  const [sending, setSending] = useState(false)
+  const [toast, setToast]     = useState(null) // { message, type: 'success'|'error' }
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editCard, setEditCard]         = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -36,8 +45,6 @@ export default function CardsTab() {
     try {
       const data = await listCards({
         search: debouncedSearch || undefined,
-        bank:   bankFilter     || undefined,
-        group:  groupFilter    || undefined,
         page: p,
         limit: LIMIT,
       })
@@ -48,24 +55,53 @@ export default function CardsTab() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, bankFilter, groupFilter, page])
+  }, [debouncedSearch, page])
 
-  useEffect(() => { setPage(1) }, [debouncedSearch, bankFilter, groupFilter])
-  useEffect(() => { load(page) }, [page, debouncedSearch, bankFilter, groupFilter]) // eslint-disable-line
+  useEffect(() => { setPage(1) }, [debouncedSearch])
+  useEffect(() => { load(page) }, [page, debouncedSearch]) // eslint-disable-line
 
   useSSE((e) => { if (e.type === 'cards_updated') load(page) })
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—'
 
-  const SORT_LABELS = ['Блокировка ↕', 'Незаблок. ↑', 'Заблок. ↑']
-  const sortedCards = blockSort === 0 ? cards : [...cards].sort((a, b) => {
+  const toggleSort = (col) => {
+    if (sortCol !== col) { setSortCol(col); setSortDir('asc') }
+    else if (sortDir === 'asc') setSortDir('desc')
+    else { setSortCol(null); setSortDir('asc') }
+  }
+
+  const sortedCards = [...cards].sort((a, b) => {
     const aBlocked = !!a.active_block
     const bBlocked = !!b.active_block
-    if (blockSort === 1) return aBlocked - bBlocked   // незаблок. выше
-    if (blockSort === 2) return bBlocked - aBlocked   // заблок. выше  // eslint-disable-line
-    return 0
+    if (aBlocked !== bBlocked) return aBlocked - bBlocked
+
+    const nameCmp = (a.full_name || '').localeCompare(b.full_name || '', 'ru')
+
+    if (sortCol === 'balance') {
+      const cmp = (a.balance ?? 0) - (b.balance ?? 0)
+      return cmp !== 0 ? (sortDir === 'asc' ? cmp : -cmp) : nameCmp
+    }
+    if (sortCol === 'turnover') {
+      const cmp = (a.monthly_turnover ?? 0) - (b.monthly_turnover ?? 0)
+      return cmp !== 0 ? (sortDir === 'asc' ? cmp : -cmp) : nameCmp
+    }
+
+    return nameCmp
   })
+
+  const handleSend = async () => {
+    if (selected.size === 0 || sending) return
+    setSending(true)
+    try {
+      await sendCards([...selected])
+      showToast('Карты отправлены')
+    } catch (e) {
+      showToast(e.message, 'error')
+    } finally {
+      setSending(false)
+    }
+  }
 
   const handleDelete = async (card, e) => {
     e.stopPropagation()
@@ -83,33 +119,20 @@ export default function CardsTab() {
       <div className="toolbar">
         <input
           className="input"
-          placeholder="Поиск по ФИО, банку, последним 4 цифрам…"
+          placeholder="Поиск по картам"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <input
-          className="input"
-          style={{ maxWidth: 160 }}
-          placeholder="Банк"
-          value={bankFilter}
-          onChange={e => setBankFilter(e.target.value)}
-        />
-        <input
-          className="input"
-          style={{ maxWidth: 160 }}
-          placeholder="Группа"
-          value={groupFilter}
-          onChange={e => setGroupFilter(e.target.value)}
-        />
         <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => setBlockSort(s => (s + 1) % 3)}
+          className="btn btn-secondary"
+          style={{ marginLeft: 'auto' }}
+          disabled={selected.size === 0 || sending}
+          onClick={handleSend}
         >
-          {SORT_LABELS[blockSort]}
+          {sending ? 'Отправка…' : 'Отправить карты'}
         </button>
         <button
           className="btn btn-primary"
-          style={{ marginLeft: 'auto' }}
           onClick={() => setShowAddModal(true)}
         >
           + Добавить карту
@@ -127,26 +150,32 @@ export default function CardsTab() {
               <table>
                 <thead>
                   <tr>
+                    <th style={{ width: 36 }}>
+                      <input
+                        type="checkbox"
+                        checked={sortedCards.length > 0 && sortedCards.every(c => selected.has(c.id))}
+                        onChange={e => setSelected(e.target.checked ? new Set(sortedCards.map(c => c.id)) : new Set())}
+                      />
+                    </th>
                     <th>ФИО</th>
                     <th>Банк</th>
                     <th>Номер карты</th>
                     <th>Телефон</th>
-                    <th>Баланс</th>
-                    <th>Оборот за месяц</th>
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('balance')}>
+                      Баланс {sortCol === 'balance' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                    </th>
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('turnover')}>
+                      Оборот за месяц {sortCol === 'turnover' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                    </th>
                     <th>Пользователь</th>
-                    <th>Дата покупки</th>
                     <th>Блокировка</th>
-                    <th>Дата блокировки</th>
-                    <th>Дата забора</th>
-                    <th>Группа</th>
-                    <th>Комментарий</th>
                     <th style={{ width: 80 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {cards.length === 0 ? (
                     <tr>
-                      <td colSpan={14}>
+                      <td colSpan={10}>
                         <div className="empty-state">
                           <div>Нет карт</div>
                           <p>Добавьте карту через кнопку выше или Telegram-бота</p>
@@ -161,6 +190,17 @@ export default function CardsTab() {
                         onClick={() => setEditCard(card)}
                         style={{ cursor: 'pointer' }}
                       >
+                        <td onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(card.id)}
+                            onChange={e => setSelected(prev => {
+                              const next = new Set(prev)
+                              e.target.checked ? next.add(card.id) : next.delete(card.id)
+                              return next
+                            })}
+                          />
+                        </td>
                         <td>{card.full_name}</td>
                         <td>{card.bank || '—'}</td>
                         <td className="td-mono">{card.card_number}</td>
@@ -168,7 +208,6 @@ export default function CardsTab() {
                         <td>{fmtMoney(card.balance)}</td>
                         <td>{fmtMoney(card.monthly_turnover)}</td>
                         <td>{card.responsible_user || '—'}</td>
-                        <td>{fmtDate(card.purchase_date)}</td>
                         <td>
                           <span style={{
                             padding: '2px 8px', borderRadius: 4, fontSize: 11,
@@ -177,14 +216,6 @@ export default function CardsTab() {
                           }}>
                             {blocked ? 'Заблок.' : 'Отсутствует'}
                           </span>
-                        </td>
-                        <td>{blocked ? fmtDate(card.active_block.blocked_at) : '—'}</td>
-                        <td>{card.pickup_date ? fmtDate(card.pickup_date) : '—'}</td>
-                        <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {card.group_name || '—'}
-                        </td>
-                        <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {card.comment || '—'}
                         </td>
                         <td onClick={e => e.stopPropagation()}>
                           <button
@@ -257,6 +288,18 @@ export default function CardsTab() {
           boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
         }}>
           Ссылка скопирована
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: copiedId ? 68 : 24, right: 24, zIndex: 999,
+          background: toast.type === 'error' ? 'var(--danger)' : 'var(--success)',
+          color: '#fff',
+          padding: '10px 18px', borderRadius: 8, fontSize: 13,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+        }}>
+          {toast.message}
         </div>
       )}
     </div>

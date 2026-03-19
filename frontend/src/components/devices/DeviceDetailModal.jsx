@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { listCardNames } from '../../api/cards'
 import { getDeviceLogs, updateDevice } from '../../api/devices'
 import { useSSE } from '../../hooks/useSSE'
 
@@ -48,10 +47,8 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
   }, [initialDevice.status, initialDevice.session_status, initialDevice.connected])
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
-    label:      initialDevice.label      ?? '',
-    owner_name: initialDevice.owner_name ?? '',
+    label: initialDevice.label ?? '',
   })
-  const [names, setNames]   = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState(null)
 
@@ -69,7 +66,6 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
 
   useEffect(() => {
     loadLogs()
-    listCardNames().then(setNames).catch(() => {})
   }, [])
 
   // Real-time: обновляем логи сразу при любом событии с устройствами
@@ -78,16 +74,15 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
   })
 
   const handleSave = async () => {
-    if (!form.label.trim() && !form.owner_name.trim()) {
-      setError('Необходимо указать название или владельца')
+    if (!form.label.trim()) {
+      setError('Необходимо указать название')
       return
     }
     setSaving(true)
     setError(null)
     try {
       const updated = await updateDevice(device.serial, {
-        label:      form.label.trim()      || null,
-        owner_name: form.owner_name.trim() || null,
+        label: form.label.trim() || null,
       })
       setDevice(updated)
       setEditing(false)
@@ -100,7 +95,7 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
   }
 
   const handleCancel = () => {
-    setForm({ label: device.label ?? '', owner_name: device.owner_name ?? '' })
+    setForm({ label: device.label ?? '' })
     setEditing(false)
     setError(null)
   }
@@ -114,7 +109,7 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
         {/* Header */}
         <div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid var(--bg-hover)', marginBottom: 0 }}>
           <div>
-            <div className="modal-title">{device.label || device.owner_name || device.serial}</div>
+            <div className="modal-title">{device.label || device.serial}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
               {device.serial}
             </div>
@@ -164,17 +159,6 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
                     placeholder="Redmi Note 12"
                   />
                 </div>
-                <div className="form-group">
-                  <label className="label">Владелец</label>
-                  <select
-                    className="input"
-                    value={form.owner_name}
-                    onChange={e => setForm(f => ({ ...f, owner_name: e.target.value }))}
-                  >
-                    <option value="">— не указан —</option>
-                    {names.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
                     {saving ? 'Сохранение…' : 'Сохранить'}
@@ -188,7 +172,6 @@ export default function DeviceDetailModal({ device: initialDevice, onClose, onSa
               <>
                 {[
                   ['Название', device.label || '—'],
-                  ['Владелец', device.owner_name || '—'],
                 ].map(([label, value]) => (
                   <div key={label} style={{
                     display: 'flex', justifyContent: 'space-between',

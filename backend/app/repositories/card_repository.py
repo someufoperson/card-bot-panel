@@ -70,6 +70,12 @@ class CardRepository:
         await self._session.delete(card)
         await self._session.flush()
 
+    async def get_by_ids(self, card_ids: list[uuid.UUID]) -> list[Card]:
+        if not card_ids:
+            return []
+        result = await self._session.execute(select(Card).where(Card.id.in_(card_ids)))
+        return list(result.scalars().all())
+
     async def get_distinct_names(self) -> list[str]:
         result = await self._session.execute(
             select(distinct(Card.full_name)).order_by(Card.full_name)

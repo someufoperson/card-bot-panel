@@ -1,6 +1,12 @@
+import html
+import logging
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
+import httpx
+
+logger = logging.getLogger(__name__)
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +15,9 @@ from app.core.broadcaster import broadcaster
 from app.models.card import Card
 from app.models.card_block import CardBlock
 from app.models.device import Device
+from app.core.config import settings as app_settings
 from app.repositories.card_repository import CardRepository
+from app.repositories.group_repository import GroupRepository
 from app.schemas.card import (
     CardBlockResponse,
     CardCreate,
@@ -18,6 +26,38 @@ from app.schemas.card import (
     CardResponse,
     CardUpdate,
 )
+
+
+def _fmt_money(v: Decimal | None) -> str:
+    if v is None:
+        return "0"
+    return f"{int(v):,}".replace(",", " ")
+
+
+def _fmt_card_number(n: str) -> str:
+    return " ".join(n[i:i+4] for i in range(0, 16, 4))
+
+
+def _format_card_message(card: Card, device: Device | None, device_domain: str) -> str:
+    bank = html.escape(card.bank or "Банк")
+    link = card.folder_link or (
+        f"{device_domain.rstrip('/')}/{device.serial}" if device else ""
+    )
+    name = html.escape(card.full_name)
+    name_part = f'<a href="{link}">{name}</a>' if link else name
+    phone = html.escape(card.phone_number or "—")
+    number = _fmt_card_number(card.card_number)
+    balance = _fmt_money(card.balance)
+    turnover = _fmt_money(card.monthly_turnover)
+
+    return (
+        f"{bank}❇️\n"
+        f"{name_part}\n"
+        f"{phone}\n"
+        f"{number}\n\n"
+        f"🤑 {balance} р\n"
+        f"💸 {turnover} р"
+    )
 
 
 def _to_response(card: Card, block: CardBlock | None = None, device: Device | None = None) -> CardResponse:
@@ -167,6 +207,50 @@ class CardService:
         await self._session.commit()
         await broadcaster.publish("cards_updated")
         return CardBlockResponse.model_validate(block)
+
+    async def send_cards(self, card_ids: list[uuid.UUID]) -> None:
+        from app.repositories.settings_repository import SettingsRepository
+        group_repo = GroupRepository(self._session)
+        settings_repo = SettingsRepository(self._session)
+
+        bot_token = app_settings.telegram_bot_token
+        device_domain_row = await settings_repo.get_by_key("device_domain")
+        device_domain = device_domain_row.value if device_domain_row else "http://localhost"
+
+        if not bot_token:
+            raise HTTPException(status_code=400, detail="Bot token не настроен в настройках")
+
+        issuance_groups = await group_repo.get_all(type="issuance")
+        if not issuance_groups:
+            raise HTTPException(status_code=400, detail="Нет групп для выдачи. Добавьте их в настройках")
+
+        cards = await self._repo.get_by_ids(card_ids)
+        if not cards:
+            raise HTTPException(status_code=400, detail="Карты не найдены")
+
+        device_ids = list({c.device_id for c in cards if c.device_id})
+        devices = await _fetch_devices_by_ids(self._session, device_ids)
+
+        parts = []
+        for card in cards:
+            device = devices.get(card.device_id) if card.device_id else None
+            parts.append(_format_card_message(card, device, device_domain))
+
+        message = "\n==================\n".join(parts)
+
+        async with httpx.AsyncClient() as client:
+            for group in issuance_groups:
+                payload = {"chat_id": group.name, "text": message, "parse_mode": "HTML"}
+                print(f"[SEND] chat_id={group.name} parse_mode=HTML text={message[:300]!r}", flush=True)
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json=payload,
+                    timeout=10,
+                )
+                print(f"[SEND] response status={resp.status_code} body={resp.text[:500]}", flush=True)
+                if resp.status_code != 200:
+                    detail = resp.json().get("description", "Ошибка Telegram API")
+                    raise HTTPException(status_code=502, detail=detail)
 
     async def get_blocks(self, card_id: uuid.UUID) -> list[CardBlockResponse]:
         card = await self._repo.get_by_id(card_id)
