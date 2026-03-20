@@ -92,9 +92,10 @@ async def handle_text(message: Message):
     if not _looks_like_card(message.text):
         return
 
-    donor_ids = await get_donor_chat_ids()
-    if str(message.chat.id) not in donor_ids:
-        return
+    if message.chat.type != "private":
+        donor_ids = await get_donor_chat_ids()
+        if str(message.chat.id) not in donor_ids:
+            return
 
     card_number = re.sub(r"\D", "", _RE_CARD.search(message.text).group())
     if await card_number_exists(card_number):
@@ -135,9 +136,10 @@ async def handle_text(message: Message):
 
 @router.message(F.photo)
 async def handle_photo(message: Message):
-    donor_ids = await get_donor_chat_ids()
-    if str(message.chat.id) not in donor_ids:
-        return
+    if message.chat.type != "private":
+        donor_ids = await get_donor_chat_ids()
+        if str(message.chat.id) not in donor_ids:
+            return
 
     caption = message.caption or ""
     if not _looks_like_card(caption):

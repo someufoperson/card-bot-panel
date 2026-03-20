@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 class Setting(Settings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_ALLOWED_USER_ID: int = 0
+    TELEGRAM_DEVICES_CHAT_ID: str = ""
 
 
 settings = Setting()
