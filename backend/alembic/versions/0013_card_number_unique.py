@@ -16,13 +16,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Delete duplicate cards keeping the one with the highest id (most recent)
+    # Delete duplicate cards keeping the most recently created one
     op.execute("""
         DELETE FROM cards
         WHERE id NOT IN (
-            SELECT MAX(id)
+            SELECT DISTINCT ON (card_number) id
             FROM cards
-            GROUP BY card_number
+            ORDER BY card_number, created_at DESC
         )
     """)
     op.create_unique_constraint("uq_cards_card_number", "cards", ["card_number"])
