@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import httpx
@@ -62,12 +63,20 @@ async def get_donor_chat_ids() -> set[str]:
 
 async def save_pending(message_id: int, user_id: int, data: dict) -> None:
     """POST /api/v1/pending-cards — сохраняет ожидающую карту в БД."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(
-            f"{_BASE}/api/v1/pending-cards",
-            json={"message_id": message_id, "user_id": user_id, "data": data},
-        )
-        resp.raise_for_status()
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{_BASE}/api/v1/pending-cards",
+                    json={"message_id": message_id, "user_id": user_id, "data": data},
+                )
+                resp.raise_for_status()
+                return
+        except httpx.TimeoutException as exc:
+            if attempt == 2:
+                raise
+            logger.warning("save_pending timeout (attempt %d/3): %s", attempt + 1, exc)
+            await asyncio.sleep(1.0)
 
 
 async def get_pending(message_id: int) -> dict | None:

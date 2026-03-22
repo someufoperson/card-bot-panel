@@ -193,6 +193,7 @@ export default function CardSidebar({ card, onClose, onUpdated }) {
                     <DeviceSelect
                       value={form.device_id}
                       onChange={v => setForm(f => ({ ...f, device_id: v }))}
+                      hint={[form.full_name, form.folder_link].filter(Boolean).join(' ')}
                     />
                   </div>
 

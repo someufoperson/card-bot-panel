@@ -108,7 +108,7 @@ export default function CardModal({ onClose, onCreated }) {
 
           <div className="form-group">
             <label className="label">Ссылка</label>
-            <DeviceSelect value={form.device_id} onChange={v => set('device_id', v)} />
+            <DeviceSelect value={form.device_id} onChange={v => set('device_id', v)} hint={[form.full_name, form.folder_link].filter(Boolean).join(' ')} />
           </div>
 
           <div className="form-group">

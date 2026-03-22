@@ -1,8 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { listDevices } from '../../api/devices'
 import { useApp } from '../../context/AppContext'
 
-export default function DeviceSelect({ value, onChange, style = {} }) {
+function tokenize(s) {
+  return s.toLowerCase().replace(/[^a-zа-яёa-z0-9]/gi, ' ').split(/\s+/).filter(Boolean)
+}
+
+function similarity(hint, deviceLabel) {
+  if (!hint || !deviceLabel) return 0
+  const hTokens = tokenize(hint)
+  const dTokens = tokenize(deviceLabel)
+  if (!hTokens.length || !dTokens.length) return 0
+  let score = 0
+  for (const h of hTokens) {
+    for (const d of dTokens) {
+      if (h === d) score += 2
+      else if (h.length > 2 && d.includes(h)) score += 1
+      else if (d.length > 2 && h.includes(d)) score += 1
+    }
+  }
+  return score
+}
+
+export default function DeviceSelect({ value, onChange, hint = '', style = {} }) {
   const { settings } = useApp()
   const [devices, setDevices] = useState([])
   const [copied, setCopied] = useState(false)
@@ -12,6 +32,11 @@ export default function DeviceSelect({ value, onChange, style = {} }) {
   }, [])
 
   const label = (d) => d.label || d.owner_name || d.serial
+
+  const sorted = useMemo(() => {
+    if (!hint) return devices
+    return [...devices].sort((a, b) => similarity(hint, label(b)) - similarity(hint, label(a)))
+  }, [devices, hint])
 
   const selected = devices.find(d => d.id === value)
 
@@ -32,7 +57,7 @@ export default function DeviceSelect({ value, onChange, style = {} }) {
         style={{ flex: 1, ...style }}
       >
         <option value="">— не выбрано —</option>
-        {devices.map(d => (
+        {sorted.map(d => (
           <option key={d.id} value={d.id}>
             {label(d)} ({d.serial})
           </option>

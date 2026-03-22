@@ -124,7 +124,12 @@ async def handle_text(message: Message):
     chat = message.chat
     card_data["group_name"] = chat.title or chat.full_name or chat.username or ""
 
-    await save_pending(processing_msg.message_id, message.from_user.id, card_data)
+    try:
+        await save_pending(processing_msg.message_id, message.from_user.id, card_data)
+    except Exception as exc:
+        logger.error("save_pending failed: %s", exc)
+        await processing_msg.edit_text("❌ Сервер недоступен. Попробуй отправить карту ещё раз.")
+        return
 
     await processing_msg.edit_text(
         _fmt_card(card_data),
@@ -172,7 +177,13 @@ async def handle_photo(message: Message):
     card_data["group_name"] = chat.title or chat.full_name or chat.username or ""
     card_data["_photo_file_id"] = message.photo[-1].file_id
 
-    await save_pending(processing_msg.message_id, message.from_user.id, card_data)
+    try:
+        await save_pending(processing_msg.message_id, message.from_user.id, card_data)
+    except Exception as exc:
+        logger.error("save_pending failed: %s", exc)
+        await processing_msg.edit_text("❌ Сервер недоступен. Попробуй отправить карту ещё раз.")
+        return
+
     await processing_msg.edit_text(
         _fmt_card(card_data),
         reply_markup=_confirmation_keyboard(processing_msg.message_id),

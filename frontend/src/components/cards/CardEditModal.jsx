@@ -188,6 +188,7 @@ export default function CardEditModal({ card, onClose, onUpdated, onDeleted }) {
               <DeviceSelect
                 value={form.device_id ?? ''}
                 onChange={v => set('device_id', v)}
+                hint={[form.full_name, form.folder_link].filter(Boolean).join(' ')}
                 style={{ padding: '6px 10px', fontSize: 13 }}
               />
             </G>

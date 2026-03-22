@@ -49,3 +49,4 @@ postgres_data/
 web-scrcpy/logs/
 web-scrcpy/host_server/recordings/
 web-scrcpy/host_server/__pycache__/
+docker_log.log
