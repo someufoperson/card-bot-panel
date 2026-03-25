@@ -1,3 +1,15 @@
+# Правки для публичного доступа через Cloudflare Tunnel
+
+## Что нужно сделать
+
+Одно изменение — полная замена `nginx/nginx.conf`.
+Flask (`web-scrcpy/host_server/app.py`) **не трогаем**.
+
+---
+
+## Файл: `nginx/nginx.conf`
+
+```nginx
 events {
     worker_connections 1024;
 }
@@ -74,3 +86,44 @@ http {
         }
     }
 }
+```
+
+---
+
+## Логика роутинга
+
+| URL | Куда идёт |
+|-----|-----------|
+| `domain.com/` | React-панель (frontend:3000) |
+| `domain.com/api/v1/...` | FastAPI (backend:8000) |
+| `domain.com/SERIALNUMBER` | Flask scrcpy (host:5000) |
+| `domain.com/static/...` | Flask scrcpy (host:5000) — его статика |
+| `domain.com/socket.io/...` | Flask scrcpy (host:5000) — WebSocket |
+| `domain.com/@vite/...` | React Vite dev assets |
+
+React не использует URL-роутинг (нет React Router), поэтому конфликтов нет.
+
+---
+
+## После изменения
+
+```bash
+docker compose restart nginx
+```
+
+## Проверка
+
+1. `https://domain.com/` → React-панель открывается
+2. `https://domain.com/api/v1/cards` → JSON ответ от FastAPI
+3. `https://domain.com/SERIALNUMBER` → страница стриминга scrcpy
+4. DevTools → Network → WS → SocketIO подключается (статус 101)
+
+---
+
+## Cloudflare Tunnel
+
+Туннель должен указывать на:
+- **Service Type**: HTTP
+- **URL**: `localhost:80`
+
+Если туннель уже настроен на `:80` — ничего менять не нужно.

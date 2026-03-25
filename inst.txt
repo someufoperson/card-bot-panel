@@ -1,0 +1,31 @@
+== ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ ==
+
+1. ДОМЕН В .env
+   Открой .env и замени строку CORS_ORIGINS:
+   CORS_ORIGINS=["http://localhost:3000","https://твой-домен.com"]
+
+2. ПЕРЕЗАПУСК DOCKER
+   docker compose restart nginx backend
+
+3. CLOUDFLARE TUNNEL
+   Туннель сейчас указывает на порт 5000 (Flask напрямую).
+   Нужно переключить его на порт 80 (Nginx), чтобы роутинг работал правильно.
+
+   Как изменить:
+   а) Зайди на dash.cloudflare.com → Zero Trust → Networks → Tunnels
+   б) Найди свой туннель → Edit → Public Hostname
+   в) Измени Service:
+      - Было:  http://localhost:5000
+      - Стало: http://localhost:80
+
+   После этого Cloudflare будет слать трафик в Nginx,
+   а Nginx сам распределит его между Flask, FastAPI и React.
+
+== ПРОВЕРКА ==
+
+После применения зайди по своему домену и проверь:
+
+  https://твой-домен.com/            → должна открыться React-панель
+  https://твой-домен.com/api/v1/     → JSON-ответ от FastAPI (или 404/422 — это нормально)
+  https://твой-домен.com/SERIAL      → страница стриминга scrcpy
+  DevTools → Network → WS            → SocketIO подключается (статус 101)

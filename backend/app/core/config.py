@@ -22,5 +22,7 @@ class Settings(BaseSettings):
     adb_notification_interval: int = 30
     bank_package_names: str = '["com.sberbank.android","kz.homebank"]'
 
+    cors_origins: list[str] = ["http://localhost:3000"]
+
 
 settings = Settings()

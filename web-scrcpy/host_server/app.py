@@ -128,6 +128,15 @@ def favicon():
     return '', 204, {'Content-Type': 'image/x-icon'}
 
 
+@app.route('/notifications', methods=['POST'])
+def receive_notification():
+    data = request.get_json(silent=True) or request.form.to_dict() or request.data
+    logger.info(f"[NOTIFICATION] headers={dict(request.headers)}")
+    logger.info(f"[NOTIFICATION] body={data}")
+    print(f"[NOTIFICATION] headers={dict(request.headers)}")
+    print(f"[NOTIFICATION] body={data}")
+    return {'status': 'received'}, 200
+
 
 def _get_inactivity_ms() -> int:
     """Fetch inactivity_timeout (minutes) from backend and convert to ms. Default 3 min."""
