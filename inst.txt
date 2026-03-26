@@ -29,3 +29,52 @@
   https://твой-домен.com/api/v1/     → JSON-ответ от FastAPI (или 404/422 — это нормально)
   https://твой-домен.com/SERIAL      → страница стриминга scrcpy
   DevTools → Network → WS            → SocketIO подключается (статус 101)
+
+
+== ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ: АВТОРИЗАЦИЯ ПАНЕЛИ ==
+
+1. ЗАДАТЬ ЛОГИН/ПАРОЛЬ В .env
+   Открыть .env и заменить значения:
+
+     PANEL_USERNAME=admin
+     PANEL_PASSWORD=твой_пароль
+     JWT_SECRET=случайная_длинная_строка
+     JWT_EXPIRE_DAYS=30
+
+   Сгенерировать JWT_SECRET и сразу записать в .env:
+     sed -i "s/JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env
+
+   Или вручную: запусти `openssl rand -hex 32`, скопируй результат и вставь в .env.
+
+2. ПЕРЕСОБРАТЬ И ПЕРЕЗАПУСТИТЬ КОНТЕЙНЕРЫ
+   (нужно, т.к. добавилась зависимость python-jose и новые файлы)
+
+     docker compose down
+     docker compose build --no-cache backend frontend
+     docker compose up -d
+
+3. ПРОВЕРИТЬ ЧТО ВСЁ РАБОТАЕТ
+   - Открыть панель в браузере — должна появиться форма входа
+   - Ввести логин/пароль из .env
+   - После входа — панель открывается как обычно
+   - Кнопка выхода — иконка внизу левой панели навигации
+
+== ЧТО ИЗМЕНИЛОСЬ (АВТОРИЗАЦИЯ) ==
+
+Backend:
+  - backend/requirements.txt       — добавлен python-jose[cryptography]
+  - backend/app/core/config.py     — новые поля: panel_username, panel_password, jwt_secret, jwt_expire_days
+  - backend/app/core/security.py   — утилиты JWT + dependency verify_session (новый файл)
+  - backend/app/api/v1/auth.py     — эндпоинты /auth/login, /auth/logout, /auth/me (новый файл)
+  - backend/app/api/v1/router.py   — добавлен auth роутер; остальные API без защиты
+
+Frontend:
+  - frontend/src/api/auth.js                        — функции checkAuth, login, logout (новый файл)
+  - frontend/src/components/auth/LoginForm.jsx       — форма входа (новый файл)
+  - frontend/src/App.jsx                            — проверка сессии при загрузке, показ формы
+  - frontend/src/components/layout/RightBar.jsx     — кнопка выхода внизу сайдбара
+
+== ВАЖНО ==
+
+API (/api/v1/*) остаётся полностью открытым — авторизация только для браузерной панели.
+Telegram-бот работает без изменений.

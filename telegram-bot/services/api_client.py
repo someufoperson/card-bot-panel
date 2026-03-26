@@ -24,7 +24,6 @@ async def create_card(card_data: dict) -> dict:
         return resp.json()
 
 
-
 async def card_number_exists(card_number: str) -> bool:
     """GET /api/v1/cards/check — проверяет, есть ли карта с таким номером в базе."""
     try:

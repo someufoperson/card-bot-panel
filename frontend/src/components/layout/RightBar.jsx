@@ -52,7 +52,7 @@ const TABS = [
   },
 ]
 
-export default function LeftBar({ tab, onTabChange }) {
+export default function LeftBar({ tab, onTabChange, onLogout }) {
   return (
     <aside style={{
       width: 48,
@@ -119,6 +119,42 @@ export default function LeftBar({ tab, onTabChange }) {
           </div>
         )
       })}
+
+      {/* Кнопка выхода — прижата к низу */}
+      <div style={{ marginTop: 'auto' }}>
+        <button
+          onClick={onLogout}
+          title="Выйти"
+          style={{
+            width: 44,
+            height: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: 'var(--text-muted)',
+            transition: 'color 0.15s, background 0.15s',
+            padding: 0,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(251,73,52,0.1)'
+            e.currentTarget.style.color = 'var(--danger)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = 'var(--text-muted)'
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M13 14l3-4-3-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 10H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
     </aside>
   )
 }

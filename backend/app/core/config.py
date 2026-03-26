@@ -24,5 +24,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    panel_username: str = "admin"
+    panel_password: str = "changeme"
+    jwt_secret: str = "change-this-to-a-random-secret-string"
+    jwt_expire_days: int = 30
+
 
 settings = Settings()
