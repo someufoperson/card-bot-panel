@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -6,7 +7,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from services.api_client import card_number_exists, create_card, delete_pending, get_donor_chat_ids, get_pending, get_setting, save_pending
+from services.api_client import card_number_exists, create_card, delete_pending, get_donor_chat_ids, get_panel_usernames, get_pending, get_setting, list_pending, save_pending
 from services.gemini_client import gemini_client
 from config import settings
 
@@ -58,8 +59,8 @@ def _safe_name(name: str) -> str:
     return _INVALID_PATH_CHARS.sub('_', name).strip() or 'unknown'
 
 
-async def _save_photo(bot: Bot, file_id: str, card_data: dict) -> None:
-    """Скачивает фото по file_id и сохраняет в папку {data_folder}/{ФИО}/{банк}_{номер}.jpg"""
+async def _save_photos(bot: Bot, file_ids: list[str], card_data: dict) -> None:
+    """Скачивает фото и сохраняет в {data_folder}/{ФИО}/{банк}_{номер}[_N].jpg"""
     try:
         data_folder = await get_setting("data_folder")
         base = Path(data_folder) if data_folder else Path("logs") / "drops"
@@ -68,12 +69,21 @@ async def _save_photo(bot: Bot, file_id: str, card_data: dict) -> None:
 
         bank = _safe_name(card_data.get("bank") or "bank")
         card_number = re.sub(r"\D", "", card_data.get("card_number") or "")
-        filename = f"{bank}_{card_number}.jpg"
 
-        file_info = await bot.get_file(file_id)
-        await bot.download_file(file_info.file_path, destination=str(folder / filename))
+        for i, file_id in enumerate(file_ids):
+            suffix = f"_{i + 1}" if len(file_ids) > 1 else ""
+            filename = f"{bank}_{card_number}{suffix}.jpg"
+            file_info = await bot.get_file(file_id)
+            await bot.download_file(file_info.file_path, destination=str(folder / filename))
     except Exception as exc:
         logger.warning("Не удалось сохранить фото: %s", exc)
+
+
+# ── Накопитель медиагрупп (альбомов) ─────────────────────────────────────────
+
+# media_group_id -> {"file_ids": [...], "caption": str, "user_id": int, "chat": Chat}
+_mg_data: dict[str, dict] = {}
+_mg_tasks: dict[str, asyncio.Task] = {}
 
 
 # ── /start ───────────────────────────────────────────────────────────────────
@@ -83,6 +93,22 @@ async def cmd_start(message: Message):
     await message.answer(
         "👋 Привет! Отправь данные карты в любом формате, и я добавлю её в панель."
     )
+
+
+# ── /pending ─────────────────────────────────────────────────────────────────
+
+@router.message(Command("pending"))
+async def cmd_pending(message: Message):
+    items = await list_pending()
+    if not items:
+        await message.answer("✅ Нет неподтверждённых карт.")
+        return
+
+    for item in items:
+        data = item["data"]
+        text = _fmt_card(data)
+        kb = _confirmation_keyboard(item["message_id"])
+        await message.answer(text, reply_markup=kb)
 
 
 # ── Основной хендлер: любой текст ─────────────────────────────────────────────
@@ -140,26 +166,84 @@ async def handle_text(message: Message):
 # ── Фото из группы-донора ─────────────────────────────────────────────────────
 
 @router.message(F.photo)
-async def handle_photo(message: Message):
+async def handle_photo(message: Message, bot: Bot):
     if message.chat.type != "private":
         donor_ids = await get_donor_chat_ids()
         if str(message.chat.id) not in donor_ids:
             return
 
-    caption = message.caption or ""
+    mg_id = message.media_group_id
+    file_id = message.photo[-1].file_id
+
+    if mg_id:
+        # Альбом: накапливаем фото, запускаем/переносим debounce-задачу
+        if mg_id not in _mg_data:
+            _mg_data[mg_id] = {
+                "file_ids": [],
+                "caption": "",
+                "user_id": message.from_user.id,
+                "chat": message.chat,
+                "chat_id": message.chat.id,
+            }
+        _mg_data[mg_id]["file_ids"].append(file_id)
+        if message.caption:
+            _mg_data[mg_id]["caption"] = message.caption
+
+        if mg_id in _mg_tasks:
+            _mg_tasks[mg_id].cancel()
+        _mg_tasks[mg_id] = asyncio.create_task(
+            _flush_media_group(mg_id, bot)
+        )
+    else:
+        # Одиночное фото
+        await _process_photo(
+            caption=message.caption or "",
+            file_ids=[file_id],
+            user_id=message.from_user.id,
+            chat=message.chat,
+            answer=message.answer,
+            bot=bot,
+        )
+
+
+async def _flush_media_group(mg_id: str, bot: Bot) -> None:
+    """Ждёт 0.5 сек после последнего фото альбома, затем обрабатывает всё вместе."""
+    await asyncio.sleep(0.5)
+    data = _mg_data.pop(mg_id, None)
+    _mg_tasks.pop(mg_id, None)
+    if not data:
+        return
+
+    chat_id = data["chat_id"]
+
+    async def answer(text, **kwargs):
+        return await bot.send_message(chat_id, text, **kwargs)
+
+    await _process_photo(
+        caption=data["caption"],
+        file_ids=data["file_ids"],
+        user_id=data["user_id"],
+        chat=data["chat"],
+        answer=answer,
+        bot=bot,
+    )
+
+
+async def _process_photo(caption: str, file_ids: list[str], user_id: int, chat, answer, bot: Bot) -> None:
+    """Общая логика обработки одного фото или альбома."""
     if not _looks_like_card(caption):
         return
 
     card_number = re.sub(r"\D", "", _RE_CARD.search(caption).group())
     if await card_number_exists(card_number):
-        await message.answer(f"⚠️ Карта *{card_number[-4:]} уже есть в базе.")
+        await answer(f"⚠️ Карта *{card_number[-4:]} уже есть в базе.")
         return
 
     if not settings.gemini_api_key:
-        await message.answer("⚠️ Gemini API ключ не настроен. Укажи его в настройках панели.")
+        await answer("⚠️ Gemini API ключ не настроен. Укажи его в настройках панели.")
         return
 
-    processing_msg = await message.answer("⏳ Распознаю данные карты…")
+    processing_msg = await answer("⏳ Распознаю данные карты…")
     card_data = await gemini_client.parse_card(caption)
 
     if not card_data or not card_data.get("card_number"):
@@ -173,12 +257,11 @@ async def handle_photo(message: Message):
     if not card_data.get("purchase_date"):
         card_data["purchase_date"] = date.today().isoformat()
 
-    chat = message.chat
     card_data["group_name"] = chat.title or chat.full_name or chat.username or ""
-    card_data["_photo_file_id"] = message.photo[-1].file_id
+    card_data["_photo_file_ids"] = file_ids  # список (1 или несколько фото)
 
     try:
-        await save_pending(processing_msg.message_id, message.from_user.id, card_data)
+        await save_pending(processing_msg.message_id, user_id, card_data)
     except Exception as exc:
         logger.error("save_pending failed: %s", exc)
         await processing_msg.edit_text("❌ Сервер недоступен. Попробуй отправить карту ещё раз.")
@@ -204,7 +287,14 @@ async def cb_confirm(callback: CallbackQuery, bot: Bot):
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    photo_file_id = card_data.pop("_photo_file_id", None)
+    photo_file_ids = card_data.pop("_photo_file_ids", None) or []
+
+    # Авто-привязка: если Telegram username подтверждающего есть в панели — назначаем
+    tg_username = callback.from_user.username
+    if tg_username and not card_data.get("responsible_user"):
+        panel_usernames = await get_panel_usernames()
+        if tg_username.lower() in {u.lower() for u in panel_usernames}:
+            card_data["responsible_user"] = tg_username
 
     try:
         payload = {k: v for k, v in card_data.items() if v is not None}
@@ -216,8 +306,8 @@ async def cb_confirm(callback: CallbackQuery, bot: Bot):
             elif len(digits) != 11:
                 payload.pop("phone_number", None)
         await create_card(payload)
-        if photo_file_id:
-            await _save_photo(bot, photo_file_id, card_data)
+        if photo_file_ids:
+            await _save_photos(bot, photo_file_ids, card_data)
         await callback.message.answer("✅ Карта успешно добавлена в панель!")
     except Exception as exc:
         logger.error("Ошибка при создании карты: %s", exc)

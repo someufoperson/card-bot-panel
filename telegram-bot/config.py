@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
 
+    redis_url: str = "redis://redis:6379"
+
     # URL FastAPI внутри Docker-сети
     fastapi_url: str = "http://backend:8000"
 

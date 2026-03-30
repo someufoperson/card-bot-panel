@@ -21,7 +21,7 @@ active_connections: Dict[str, dict] = {}  # serial -> {scrcpy, queue, task}
 sid_to_device: Dict[str, str] = {}        # sid -> serial
 room_clients: Dict[str, Set[str]] = {}    # serial -> set(sid)
 
-API = "http://localhost:8000/api/v1"
+API = "http://localhost:8001/api/v1"
 
 
 def _move_video_and_log(serial: str, src: str) -> None:
@@ -126,6 +126,7 @@ def video_send_task(serial: str):
 @app.route('/favicon.ico')
 def favicon():
     return '', 204, {'Content-Type': 'image/x-icon'}
+
 
 
 @app.route('/notifications', methods=['POST'])

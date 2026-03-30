@@ -93,3 +93,27 @@ async def delete_pending(message_id: int) -> None:
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.delete(f"{_BASE}/api/v1/pending-cards/{message_id}")
         resp.raise_for_status()
+
+
+async def list_pending() -> list[dict]:
+    """GET /api/v1/pending-cards — список всех неподтверждённых карт."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{_BASE}/api/v1/pending-cards")
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as exc:
+        logger.warning("list_pending failed: %s", exc)
+        return []
+
+
+async def get_panel_usernames() -> set[str]:
+    """GET /api/v1/users/usernames — список логинов пользователей панели."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{_BASE}/api/v1/users/usernames")
+            if resp.status_code == 200:
+                return set(resp.json())
+    except Exception as exc:
+        logger.warning("get_panel_usernames failed: %s", exc)
+    return set()

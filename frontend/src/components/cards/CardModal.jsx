@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createCard } from '../../api/cards'
 import DeviceSelect from './DeviceSelect'
+import UserSelect from './UserSelect'
 
 const EMPTY = {
   full_name: '', bank: '', card_number: '', phone_number: '',
@@ -186,11 +187,9 @@ export default function CardModal({ onClose, onCreated }) {
 
           <div className="form-group">
             <label className="label">Пользователь (ответственный)</label>
-            <input
-              className="input"
+            <UserSelect
               value={form.responsible_user}
-              onChange={e => set('responsible_user', e.target.value)}
-              placeholder="Имя пользователя"
+              onChange={v => set('responsible_user', v)}
             />
           </div>
 

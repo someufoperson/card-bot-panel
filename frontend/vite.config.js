@@ -11,10 +11,12 @@ export default defineConfig({
     port: 3000,
     allowedHosts: ['money-maker.shop'],
     hmr: {
-      protocol: 'wss',
-      host: 'money-maker.shop',
-      clientPort: 443,
       path: '/__vite_hmr',
+      ...(process.env.VITE_HMR_HOST ? {
+        protocol: 'wss',
+        host: process.env.VITE_HMR_HOST,
+        clientPort: 443,
+      } : {}),
     },
     proxy: {
       '/api': {

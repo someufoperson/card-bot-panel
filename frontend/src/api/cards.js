@@ -20,3 +20,4 @@ export const blockCard      = (id, blockedAt)   => api.post(`/cards/${id}/blocks
 export const unblockCard    = (id, unblockedAt) => api.delete(`/cards/${id}/blocks/active`, unblockedAt ? { unblocked_at: unblockedAt } : undefined)
 export const getCardBlocks  = (id)       => api.get(`/cards/${id}/blocks`)
 export const sendCards      = (cardIds) => api.post('/cards/send', { card_ids: cardIds })
+export const bulkAssign     = (cardIds, responsibleUser) => api.post('/cards/bulk-assign', { card_ids: cardIds, responsible_user: responsibleUser || null })

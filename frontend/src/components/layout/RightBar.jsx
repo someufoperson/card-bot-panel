@@ -2,6 +2,7 @@ const TABS = [
   {
     id: 'cards',
     label: 'Карты',
+    roles: null, // all
     icon: (
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
@@ -14,6 +15,7 @@ const TABS = [
   {
     id: 'transactions',
     label: 'Транзакции',
+    roles: null,
     icon: (
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="3" y="13" width="2.5" height="4" rx="0.5" fill="currentColor"/>
@@ -27,6 +29,7 @@ const TABS = [
   {
     id: 'devices',
     label: 'Устройства',
+    roles: null,
     icon: (
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="6" y="1.5" width="8" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
@@ -40,6 +43,7 @@ const TABS = [
   {
     id: 'settings',
     label: 'Настройки',
+    roles: null,
     icon: (
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
@@ -50,9 +54,34 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: 'logs',
+    label: 'Логи',
+    roles: ['dev'],
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M5 7h2M5 10h6M5 13h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <circle cx="14" cy="13" r="1" fill="currentColor"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'users',
+    label: 'Пользователи',
+    roles: ['admin', 'dev'],
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M2 17c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M14 9l2 2 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
 ]
 
-export default function LeftBar({ tab, onTabChange, onLogout }) {
+export default function LeftBar({ tab, onTabChange, onLogout, user }) {
+  const visibleTabs = TABS.filter(t => !t.roles || t.roles.includes(user?.role))
   return (
     <aside style={{
       width: 48,
@@ -68,7 +97,7 @@ export default function LeftBar({ tab, onTabChange, onLogout }) {
       userSelect: 'none',
       gap: 2,
     }}>
-      {TABS.map(t => {
+      {visibleTabs.map(t => {
         const active = tab === t.id
         return (
           <div key={t.id} style={{ position: 'relative' }}>

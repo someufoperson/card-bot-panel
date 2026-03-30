@@ -1,13 +1,24 @@
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Cookie, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.broadcaster import broadcaster
 from app.core.database import get_db_session
+from app.core.security import _decode
+from app.models.card import Card
 from app.schemas.card import CardBlockCreate, CardBlockResponse, CardCreate, CardListResponse, CardResponse, CardSendRequest, CardUnblockCreate, CardUpdate
 from app.services.card_service import CardService
 
 router = APIRouter()
+
+
+class BulkAssignRequest(BaseModel):
+    card_ids: list[uuid.UUID]
+    responsible_user: Optional[str] = None
 
 
 def _get_service(session: AsyncSession = Depends(get_db_session)) -> CardService:
@@ -27,6 +38,20 @@ async def check_card_exists(
     return {"exists": await service.check_exists(card_number)}
 
 
+@router.post("/bulk-assign", status_code=204)
+async def bulk_assign(
+    data: BulkAssignRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await db.execute(
+        update(Card)
+        .where(Card.id.in_(data.card_ids))
+        .values(responsible_user=data.responsible_user)
+    )
+    await db.commit()
+    await broadcaster.publish("cards_updated")
+
+
 @router.get("", response_model=CardListResponse)
 async def list_cards(
     search: str | None = Query(None),
@@ -36,7 +61,12 @@ async def list_cards(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     service: CardService = Depends(_get_service),
+    session: str | None = Cookie(default=None),
 ):
+    if session:
+        payload = _decode(session)
+        if payload and payload.get("role") == "user":
+            user = payload.get("sub")
     return await service.get_all(search, bank, group, page, limit, user)
 
 

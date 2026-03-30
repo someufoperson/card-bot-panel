@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { blockCard, deleteCard, unblockCard, updateCard } from '../../api/cards'
 import DeviceSelect from './DeviceSelect'
+import UserSelect from './UserSelect'
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—'
 
@@ -19,7 +20,7 @@ const Row = ({ children }) => (
   </div>
 )
 
-export default function CardEditModal({ card, onClose, onUpdated, onDeleted }) {
+export default function CardEditModal({ card, isReadOnly, onClose, onUpdated, onDeleted }) {
   const [form, setForm]     = useState({})
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState(null)
@@ -72,7 +73,7 @@ export default function CardEditModal({ card, onClose, onUpdated, onDeleted }) {
         card_number:      form.card_number.trim()      || null,
         phone_number:     form.phone_number.trim()     || null,
         group_name:       form.group_name.trim()       || null,
-        responsible_user: form.responsible_user.trim() || null,
+        responsible_user: isReadOnly ? (card.responsible_user || null) : (form.responsible_user.trim() || null),
         balance:          form.balance !== ''          ? form.balance          : null,
         monthly_turnover: form.monthly_turnover !== '' ? form.monthly_turnover : null,
         folder_link:      form.folder_link.trim()      || null,
@@ -183,7 +184,15 @@ export default function CardEditModal({ card, onClose, onUpdated, onDeleted }) {
           </Row>
 
           <Row>
-            <G label="Пользователь">{inp('responsible_user')}</G>
+            {!isReadOnly && (
+              <G label="Пользователь">
+                <UserSelect
+                  value={form.responsible_user ?? ''}
+                  onChange={v => set('responsible_user', v)}
+                  style={{ padding: '6px 10px', fontSize: 13 }}
+                />
+              </G>
+            )}
             <G label="Ссылка">
               <DeviceSelect
                 value={form.device_id ?? ''}
@@ -269,7 +278,9 @@ export default function CardEditModal({ card, onClose, onUpdated, onDeleted }) {
           flexShrink: 0,
           borderRadius: '0 0 var(--radius) var(--radius)',
         }}>
-          <button className="btn btn-danger" onClick={handleDelete} disabled={saving}>Удалить</button>
+          {!isReadOnly && (
+            <button className="btn btn-danger" onClick={handleDelete} disabled={saving}>Удалить</button>
+          )}
           <div style={{ flex: 1 }} />
           <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Отмена</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>

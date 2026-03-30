@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { login } from '../../api/auth'
 
-export default function LoginForm({ onSuccess }) {
+export default function LoginForm({ onSuccess, onMustSetPassword }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
+  const [step, setStep]         = useState('username') // 'username' | 'password'
   const [error, setError]       = useState(null)
   const [loading, setLoading]   = useState(false)
 
@@ -13,13 +14,28 @@ export default function LoginForm({ onSuccess }) {
     setError(null)
     setLoading(true)
     try {
-      await login(username, password)
-      onSuccess()
+      const result = await login(username, step === 'password' ? password : null)
+      if (result.must_set_password) {
+        onMustSetPassword(username)
+      } else {
+        onSuccess()
+      }
     } catch (err) {
-      setError(err.message)
+      if (step === 'username') {
+        // пользователь существует, но нужен пароль — переходим к шагу пароля
+        setStep('password')
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleBack = () => {
+    setStep('username')
+    setPassword('')
+    setError(null)
   }
 
   return (
@@ -46,7 +62,7 @@ export default function LoginForm({ onSuccess }) {
             Card Panel
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-            Введите данные для входа
+            {step === 'username' ? 'Введите логин для входа' : `Введите пароль для ${username}`}
           </div>
         </div>
 
@@ -64,49 +80,73 @@ export default function LoginForm({ onSuccess }) {
           </div>
         )}
 
-        <div className="form-group">
-          <label className="label">Логин</label>
-          <input
-            className="input"
-            type="text"
-            autoComplete="username"
-            autoFocus
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            disabled={loading}
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="label">Пароль</label>
-          <div className="password-wrap">
+        {step === 'username' && (
+          <div className="form-group">
+            <label className="label">Логин</label>
             <input
               className="input"
-              type={showPass ? 'text' : 'password'}
-              autoComplete="current-password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
+              type="text"
+              autoComplete="username"
+              autoFocus
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               disabled={loading}
             />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPass(v => !v)}
-              tabIndex={-1}
-            >
-              {showPass ? '🙈' : '👁'}
-            </button>
           </div>
-        </div>
+        )}
+
+        {step === 'password' && (
+          <div className="form-group">
+            <label className="label">Пароль</label>
+            <div className="password-wrap">
+              <input
+                className="input"
+                type={showPass ? 'text' : 'password'}
+                autoComplete="current-password"
+                autoFocus
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                disabled={loading}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPass(v => !v)}
+                tabIndex={-1}
+              >
+                {showPass ? '🙈' : '👁'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <button
           className="btn btn-primary"
           type="submit"
-          disabled={loading || !username || !password}
+          disabled={loading || !username || (step === 'password' && !password)}
           style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
         >
-          {loading ? 'Вход…' : 'Войти'}
+          {loading ? 'Загрузка…' : step === 'username' ? 'Продолжить' : 'Войти'}
         </button>
+
+        {step === 'password' && (
+          <button
+            type="button"
+            onClick={handleBack}
+            style={{
+              width: '100%',
+              marginTop: 8,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 13,
+              cursor: 'pointer',
+              padding: '6px 0',
+            }}
+          >
+            ← Назад
+          </button>
+        )}
       </form>
     </div>
   )

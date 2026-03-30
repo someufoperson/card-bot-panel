@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { deleteCard, listCards, sendCards } from '../../api/cards'
+import { bulkAssign, deleteCard, listCards, sendCards } from '../../api/cards'
 import { useApp } from '../../context/AppContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useSSE } from '../../hooks/useSSE'
 import CardModal from './CardModal'
 import CardEditModal from './CardEditModal'
+import UserSelect from './UserSelect'
 
 const LIMIT = 50
 
 const fmtMoney = (v) => v != null ? Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
 
-export default function CardsTab() {
+export default function CardsTab({ currentUser }) {
+  const isReadOnly = currentUser?.role === 'user'
   const { settings } = useApp()
   const [copiedId, setCopiedId] = useState(null)
   const [cards, setCards]     = useState([])
@@ -26,8 +28,10 @@ export default function CardsTab() {
   const [sortCol, setSortCol] = useState(null)   // null | 'balance' | 'turnover'
   const [sortDir, setSortDir] = useState('asc')  // 'asc' | 'desc'
 
-  const [sending, setSending] = useState(false)
-  const [toast, setToast]     = useState(null) // { message, type: 'success'|'error' }
+  const [sending, setSending]         = useState(false)
+  const [assignUser, setAssignUser]   = useState('')
+  const [assigning, setAssigning]     = useState(false)
+  const [toast, setToast]             = useState(null) // { message, type: 'success'|'error' }
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
@@ -103,6 +107,22 @@ export default function CardsTab() {
     }
   }
 
+  const handleBulkAssign = async () => {
+    if (selected.size === 0 || assigning) return
+    setAssigning(true)
+    try {
+      await bulkAssign([...selected], assignUser)
+      showToast(`Пользователь назначен для ${selected.size} карт`)
+      setSelected(new Set())
+      setAssignUser('')
+      load(page)
+    } catch (e) {
+      showToast(e.message, 'error')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
   const handleDelete = async (card, e) => {
     e.stopPropagation()
     if (!window.confirm(`Удалить карту ${card.full_name}?`)) return
@@ -123,20 +143,45 @@ export default function CardsTab() {
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <button
-          className="btn btn-secondary"
-          style={{ marginLeft: 'auto' }}
-          disabled={selected.size === 0 || sending}
-          onClick={handleSend}
-        >
-          {sending ? 'Отправка…' : 'Отправить карты'}
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowAddModal(true)}
-        >
-          + Добавить карту
-        </button>
+        {!isReadOnly && (
+          <>
+            {selected.size > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  {selected.size} выбрано:
+                </span>
+                <UserSelect
+                  value={assignUser}
+                  onChange={setAssignUser}
+                  style={{ height: 32, padding: '0 8px', fontSize: 13, width: 150 }}
+                />
+                <button
+                  className="btn btn-secondary"
+                  disabled={assigning}
+                  onClick={handleBulkAssign}
+                  style={{ height: 32, whiteSpace: 'nowrap' }}
+                >
+                  {assigning ? '…' : 'Назначить'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  disabled={selected.size === 0 || sending}
+                  onClick={handleSend}
+                  style={{ height: 32, whiteSpace: 'nowrap' }}
+                >
+                  {sending ? 'Отправка…' : 'Отправить'}
+                </button>
+              </div>
+            )}
+            <button
+              className="btn btn-primary"
+              style={selected.size === 0 ? { marginLeft: 'auto' } : {}}
+              onClick={() => setShowAddModal(true)}
+            >
+              + Добавить карту
+            </button>
+          </>
+        )}
       </div>
 
       <div className="card" style={{ padding: 0 }}>
@@ -150,13 +195,15 @@ export default function CardsTab() {
               <table>
                 <thead>
                   <tr>
-                    <th style={{ width: 36 }}>
-                      <input
-                        type="checkbox"
-                        checked={sortedCards.length > 0 && sortedCards.every(c => selected.has(c.id))}
-                        onChange={e => setSelected(e.target.checked ? new Set(sortedCards.map(c => c.id)) : new Set())}
-                      />
-                    </th>
+                    {!isReadOnly && (
+                      <th style={{ width: 36 }}>
+                        <input
+                          type="checkbox"
+                          checked={sortedCards.length > 0 && sortedCards.every(c => selected.has(c.id))}
+                          onChange={e => setSelected(e.target.checked ? new Set(sortedCards.map(c => c.id)) : new Set())}
+                        />
+                      </th>
+                    )}
                     <th>ФИО</th>
                     <th>Банк</th>
                     <th>Номер карты</th>
@@ -169,7 +216,7 @@ export default function CardsTab() {
                     </th>
                     <th>Пользователь</th>
                     <th>Блокировка</th>
-                    <th style={{ width: 80 }}></th>
+                    {!isReadOnly && <th style={{ width: 80 }}></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -190,17 +237,19 @@ export default function CardsTab() {
                         onClick={() => setEditCard(card)}
                         style={{ cursor: 'pointer' }}
                       >
-                        <td onClick={e => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(card.id)}
-                            onChange={e => setSelected(prev => {
-                              const next = new Set(prev)
-                              e.target.checked ? next.add(card.id) : next.delete(card.id)
-                              return next
-                            })}
-                          />
-                        </td>
+                        {!isReadOnly && (
+                          <td onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selected.has(card.id)}
+                              onChange={e => setSelected(prev => {
+                                const next = new Set(prev)
+                                e.target.checked ? next.add(card.id) : next.delete(card.id)
+                                return next
+                              })}
+                            />
+                          </td>
+                        )}
                         <td>{card.full_name}</td>
                         <td>{card.bank || '—'}</td>
                         <td className="td-mono">{card.card_number}</td>
@@ -217,21 +266,23 @@ export default function CardsTab() {
                             {blocked ? 'Заблок.' : 'Отсутствует'}
                           </span>
                         </td>
-                        <td onClick={e => e.stopPropagation()}>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            disabled={!card.device}
-                            onClick={() => {
-                              if (!card.device) return
-                              const domain = settings.device_domain || 'http://localhost'
-                              navigator.clipboard.writeText(`${domain}/${card.device.serial}`)
-                              setCopiedId(card.id)
-                              setTimeout(() => setCopiedId(null), 2000)
-                            }}
-                          >
-                            Копировать ссылку
-                          </button>
-                        </td>
+                        {!isReadOnly && (
+                          <td onClick={e => e.stopPropagation()}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              disabled={!card.device}
+                              onClick={() => {
+                                if (!card.device) return
+                                const domain = settings.device_domain || 'http://localhost'
+                                navigator.clipboard.writeText(`${domain}/${card.device.serial}`)
+                                setCopiedId(card.id)
+                                setTimeout(() => setCopiedId(null), 2000)
+                              }}
+                            >
+                              Копировать ссылку
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -268,6 +319,7 @@ export default function CardsTab() {
       {editCard && (
         <CardEditModal
           card={editCard}
+          isReadOnly={isReadOnly}
           onClose={() => setEditCard(null)}
           onUpdated={(updated) => {
             setCards(cs => cs.map(c => c.id === updated.id ? updated : c))
